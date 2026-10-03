@@ -1,0 +1,284 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(0.995 0.003 26);
+  --foreground: oklch(0.18 0.015 26);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.015 26);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.015 26);
+  --primary: oklch(0.42 0.19 26);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.965 0.018 26);
+  --secondary-foreground: oklch(0.38 0.18 26);
+  --muted: oklch(0.965 0.008 26);
+  --muted-foreground: oklch(0.50 0.02 26);
+  --accent: oklch(0.95 0.025 26);
+  --accent-foreground: oklch(0.36 0.19 26);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.91 0.012 26);
+  --input: oklch(0.89 0.015 26);
+  --ring: oklch(0.45 0.18 26);
+  --chart-1: oklch(0.42 0.19 26);
+  --chart-2: oklch(0.72 0.17 75);
+  --chart-3: oklch(0.52 0.14 26);
+  --chart-4: oklch(0.65 0.12 35);
+  --chart-5: oklch(0.32 0.14 26);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0.005 26);
+  --sidebar-foreground: oklch(0.18 0.015 26);
+  --sidebar-primary: oklch(0.42 0.19 26);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.95 0.025 26);
+  --sidebar-accent-foreground: oklch(0.38 0.18 26);
+  --sidebar-border: oklch(0.91 0.012 26);
+  --sidebar-ring: oklch(0.45 0.18 26);
+}
+
+.dark {
+  --background: oklch(0.14 0.02 26);
+  --foreground: oklch(0.98 0.005 26);
+  --card: oklch(0.18 0.025 26);
+  --card-foreground: oklch(0.98 0.005 26);
+  --popover: oklch(0.18 0.025 26);
+  --popover-foreground: oklch(0.98 0.005 26);
+  --primary: oklch(0.58 0.20 26);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.24 0.04 26);
+  --secondary-foreground: oklch(0.98 0.005 26);
+  --muted: oklch(0.22 0.03 26);
+  --muted-foreground: oklch(0.72 0.02 26);
+  --accent: oklch(0.25 0.04 26);
+  --accent-foreground: oklch(0.98 0.005 26);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(0.28 0.03 26);
+  --input: oklch(0.28 0.03 26);
+  --ring: oklch(0.58 0.20 26);
+  --chart-1: oklch(0.58 0.20 26);
+  --chart-2: oklch(0.75 0.16 75);
+  --chart-3: oklch(0.68 0.14 26);
+  --chart-4: oklch(0.80 0.10 35);
+  --chart-5: oklch(0.48 0.15 26);
+  --sidebar: oklch(0.16 0.025 26);
+  --sidebar-foreground: oklch(0.98 0.005 26);
+  --sidebar-primary: oklch(0.58 0.20 26);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.22 0.03 26);
+  --sidebar-accent-foreground: oklch(0.98 0.005 26);
+  --sidebar-border: oklch(0.28 0.03 26);
+  --sidebar-ring: oklch(0.58 0.20 26);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/*
+ * Spec §14 task 17 — print CSS for faculty + student Code sheets.
+ *
+ * Each issued Code prints as one cut-apart slip carrying the event title,
+ * a QR encoding only `/vote?token=<CODE>`, the Code itself, the department
+ * name, and the one-Code-one-vote line. Admin chrome already carries
+ * `print:hidden` in the layout and pages; the rules below reset the
+ * remaining screen chrome (narrow admin column, card shadows, dark-mode
+ * colors) so the sheet prints cleanly from a phone browser as well as
+ * desktop, with no orphaned (split) slips.
+ */
+
+.code-sheet-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+}
+
+.code-slip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+  background: #fff;
+  color: #000;
+  border: 1px solid #d4d4d4;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.code-slip-event {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.code-slip-kind {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #525252;
+}
+
+.code-slip-department {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.code-slip-holder {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.code-slip-qr {
+  display: inline-block;
+  background: #fff !important;
+  padding: 0.5rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 0.5rem;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.code-slip-qr svg {
+  display: block;
+  width: 96px;
+  height: 96px;
+}
+
+.code-slip-code {
+  margin: 0;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  overflow-wrap: anywhere;
+}
+
+.code-slip-rule {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #404040;
+}
+
+.code-slip-copy {
+  border: 1px solid #d4d4d4;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: #fff;
+}
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Screen admin column is max-w-2xl: release it on paper so slips use the
+   * full page width whether printing started from a phone or desktop. */
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+  }
+
+  .code-sheet-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+  }
+
+  .code-slip {
+    border: 1px solid #000 !important;
+    border-radius: 0;
+    box-shadow: none !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .code-slip-kind,
+  .code-slip-rule {
+    color: #000 !important;
+  }
+
+  .code-slip-qr {
+    border-color: #000 !important;
+    box-shadow: none !important;
+  }
+
+  .code-slip-copy {
+    display: none !important;
+  }
+}
