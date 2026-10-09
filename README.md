@@ -88,8 +88,8 @@ The platform is designed with cryptographic token security, strict department is
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/lloydshinee/teacher.git
-cd teacher
+git clone https://github.com/lloydshinee/teachers-day-voting.git
+cd teachers-day-voting
 npm install
 ```
 
