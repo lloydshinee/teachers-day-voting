@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { listElections } from "@/lib/election/queries";
 import { listFacultyByDepartment } from "@/lib/faculty/queries";
 
 import { FacultyManager } from "./forms";
@@ -10,7 +11,10 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminFacultyPage() {
-  const result = await listFacultyByDepartment();
+  const [result, electionsResult] = await Promise.all([
+    listFacultyByDepartment(),
+    listElections(),
+  ]);
 
   if (!result.ok) {
     const isDenied =
@@ -33,6 +37,7 @@ export default async function AdminFacultyPage() {
   }
 
   const departments = result.groups.map((group) => group.department);
+  const elections = electionsResult.ok ? electionsResult.elections : [];
 
   return (
     <section aria-labelledby="faculty-heading" className="flex flex-col gap-6">
@@ -60,6 +65,7 @@ export default async function AdminFacultyPage() {
         departments={departments}
         totalEligible={result.totalEligible}
         totalArchived={result.totalArchived}
+        elections={elections}
       />
     </section>
   );

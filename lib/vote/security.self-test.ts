@@ -36,17 +36,14 @@
  * only PASS/FAIL lines, counts, stage names, and Postgres error codes.
  */
 
-import { createHash, randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
-import {
-  CODE_ALPHABET,
-  CODE_LETTER_COUNT,
-} from "../faculty/code-format.js";
+import { generateCode } from "../tokens/format.js";
 
 // ---------------------------------------------------------------------------
 // Tiny runner.
@@ -211,14 +208,8 @@ function sha256Hex(input: string): string {
 
 /** Fresh random token hash for `SHA-256(pepper + letters)` (spec §6). */
 function freshTokenHash(pepper: string): string {
-  let letters = "";
-  for (let i = 0; i < CODE_LETTER_COUNT; i += 1) {
-    const draw = CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
-    if (draw === undefined) {
-      throw new Error("Code alphabet draw out of range.");
-    }
-    letters += draw;
-  }
+  const code = generateCode();
+  const letters = code.replace(/-/g, "");
   return sha256Hex(pepper + letters);
 }
 

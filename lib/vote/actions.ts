@@ -21,6 +21,7 @@ import {
   voteCodeInputSchema,
   type CastFacultyVoteResult,
   type CastStudentVoteResult,
+  type RateLimitedResult,
   type ResolveFacultyBallotResult,
   type ResolveStudentBallotResult,
   type ResolveVoteBallotResult,
@@ -103,63 +104,67 @@ const finalistFacultyRowSchema = z.object({
   picture_url: z.string().nullable().optional(),
 });
 
-function invalid(): ResolveFacultyBallotResult {
+function invalidResult(): { ok: false; code: "INVALID"; message: string } {
   return { ok: false, code: "INVALID", message: VOTE_UNIFORM_ERROR };
 }
 
-function invalidStudent(): ResolveStudentBallotResult {
-  return { ok: false, code: "INVALID", message: VOTE_UNIFORM_ERROR };
-}
-
-function invalidUnified(): ResolveVoteBallotResult {
-  return { ok: false, code: "INVALID", message: VOTE_UNIFORM_ERROR };
-}
-
-function castInvalid(): CastFacultyVoteResult {
-  return { ok: false, code: "INVALID", message: VOTE_UNIFORM_ERROR };
-}
-
-function castStudentInvalid(): CastStudentVoteResult {
-  return { ok: false, code: "INVALID", message: VOTE_UNIFORM_ERROR };
-}
-
-function unavailableResolve(): ResolveFacultyBallotResult {
+function unavailableResult(): { ok: false; code: "UNAVAILABLE"; message: string } {
   return { ok: false, code: "UNAVAILABLE", message: VOTE_UNAVAILABLE_ERROR };
 }
 
-function unavailableStudentResolve(): ResolveStudentBallotResult {
-  return { ok: false, code: "UNAVAILABLE", message: VOTE_UNAVAILABLE_ERROR };
-}
+type PreparedVoteCode =
+  | {
+      ok: true;
+      parsedCode: ReturnType<typeof voteCodeInputSchema.safeParse>;
+      tokenHash: string | null;
+    }
+  | {
+      ok: false;
+      error: { ok: false; code: "UNAVAILABLE"; message: string };
+    };
 
-function unavailableUnifiedResolve(): ResolveVoteBallotResult {
-  return { ok: false, code: "UNAVAILABLE", message: VOTE_UNAVAILABLE_ERROR };
-}
-
-function unavailableCast(): CastFacultyVoteResult {
-  return { ok: false, code: "UNAVAILABLE", message: VOTE_UNAVAILABLE_ERROR };
-}
-
-function unavailableStudentCast(): CastStudentVoteResult {
-  return { ok: false, code: "UNAVAILABLE", message: VOTE_UNAVAILABLE_ERROR };
+function prepareVoteCode(code: string): PreparedVoteCode {
+  const parsedCode = voteCodeInputSchema.safeParse(code);
+  let tokenHash: string | null = null;
+  try {
+    tokenHash = parsedCode.success ? hashFacultyCode(parsedCode.data) : null;
+  } catch {
+    // Pepper env missing — server misconfiguration, independent of the
+    // presented Code, so this oracles nothing about token validity.
+    // Not a voter failure: no rate accounting happens here.
+    return { ok: false, error: unavailableResult() };
+  }
+  return { ok: true, parsedCode, tokenHash };
 }
 
 /**
  * Resolves the caller IP for the rate gate. Production callers omit the
- * override and the first `x-forwarded-for` entry (else `x-real-ip`) is used;
+ * override and the client IP is extracted safely from request headers;
  * with no request context (background/self-test) every caller shares the
  * `"unknown"` bucket. The optional override exists so tests can simulate
  * distinct callers without a request scope.
+ *
+ * Security note: The client can manipulate the initial entries of `x-forwarded-for`
+ * by setting their own header before reaching our reverse proxy/load balancer.
+ * Trusted upstream proxies append the client's actual connecting IP to the end
+ * of the `x-forwarded-for` chain. We inspect the last entry (the one set by the
+ * trusted upstream proxy) rather than the client-controlled first entry,
+ * falling back to `x-real-ip` or "unknown".
  */
-async function resolveClientIp(override?: string): Promise<string> {
+export async function resolveClientIp(override?: string): Promise<string> {
   const trimmed = override?.trim();
   if (trimmed !== undefined && trimmed !== "") {
     return trimmed;
   }
   try {
     const store = await headers();
-    const firstForwarded = store.get("x-forwarded-for")?.split(",")[0]?.trim();
-    if (firstForwarded !== undefined && firstForwarded !== "") {
-      return firstForwarded;
+    const forwarded = store.get("x-forwarded-for");
+    if (forwarded) {
+      const parts = forwarded.split(",").map((p) => p.trim()).filter(Boolean);
+      const lastForwarded = parts[parts.length - 1];
+      if (lastForwarded !== undefined && lastForwarded !== "") {
+        return lastForwarded;
+      }
     }
     const realIp = store.get("x-real-ip")?.trim();
     if (realIp !== undefined && realIp !== "") {
@@ -177,7 +182,7 @@ async function resolveClientIp(override?: string): Promise<string> {
  * before any token validation (no DB); hashing the Code first is fine —
  * it is a deterministic transform, not validation.
  */
-async function checkVoteGate(
+export async function checkVoteGate(
   tokenHash: string | null,
   clientIp?: string,
 ): Promise<VoteRateLimitDecision> {
@@ -185,51 +190,7 @@ async function checkVoteGate(
   return consumeVoteAttempt(ip, tokenHash);
 }
 
-function rateLimitedResolve(
-  retryAfterSeconds: number,
-): ResolveFacultyBallotResult {
-  return {
-    ok: false,
-    code: "RATE_LIMITED",
-    message: VOTE_RATE_LIMITED_ERROR,
-    retryAfterSeconds,
-  };
-}
-
-function rateLimitedStudentResolve(
-  retryAfterSeconds: number,
-): ResolveStudentBallotResult {
-  return {
-    ok: false,
-    code: "RATE_LIMITED",
-    message: VOTE_RATE_LIMITED_ERROR,
-    retryAfterSeconds,
-  };
-}
-
-function rateLimitedUnifiedResolve(
-  retryAfterSeconds: number,
-): ResolveVoteBallotResult {
-  return {
-    ok: false,
-    code: "RATE_LIMITED",
-    message: VOTE_RATE_LIMITED_ERROR,
-    retryAfterSeconds,
-  };
-}
-
-function rateLimitedCast(retryAfterSeconds: number): CastFacultyVoteResult {
-  return {
-    ok: false,
-    code: "RATE_LIMITED",
-    message: VOTE_RATE_LIMITED_ERROR,
-    retryAfterSeconds,
-  };
-}
-
-function rateLimitedStudentCast(
-  retryAfterSeconds: number,
-): CastStudentVoteResult {
+function rateLimitedResult(retryAfterSeconds: number): RateLimitedResult {
   return {
     ok: false,
     code: "RATE_LIMITED",
@@ -249,31 +210,25 @@ export async function resolveFacultyBallot(
   code: string,
   clientIp?: string,
 ): Promise<ResolveFacultyBallotResult> {
-  const parsedCode = voteCodeInputSchema.safeParse(code);
-
-  let tokenHash: string | null = null;
-  try {
-    tokenHash = parsedCode.success ? hashFacultyCode(parsedCode.data) : null;
-  } catch {
-    // Pepper env missing — server misconfiguration, independent of the
-    // presented Code, so this oracles nothing about token validity.
-    // Not a voter failure: no rate accounting happens here.
-    return unavailableResolve();
+  const prep = prepareVoteCode(code);
+  if (!prep.ok) {
+    return prep.error;
   }
+  const { parsedCode, tokenHash } = prep;
 
   // Rate gate before any token validation (no database lookup while
   // gated). The IP attempt is recorded even for malformed Codes; the token
   // budget only applies once a hash exists.
   const gate = await checkVoteGate(tokenHash, clientIp);
   if (!gate.allowed) {
-    return rateLimitedResolve(gate.retryAfterSeconds);
+    return rateLimitedResult(gate.retryAfterSeconds);
   }
 
   // Every INVALID outcome below counts one failure against this hash, so
   // repeated probing locks the hash while the message stays uniform.
   const fail = (): ResolveFacultyBallotResult => {
     recordVoteFailure(tokenHash);
-    return invalid();
+    return invalidResult();
   };
 
   if (!parsedCode.success) {
@@ -391,26 +346,22 @@ export async function castFacultyVote(
   candidateId: string,
   clientIp?: string,
 ): Promise<CastFacultyVoteResult> {
-  const parsedCode = voteCodeInputSchema.safeParse(code);
-  const parsedCandidate = voteCandidateInputSchema.safeParse(candidateId);
-
-  let tokenHash: string | null = null;
-  try {
-    tokenHash = parsedCode.success ? hashFacultyCode(parsedCode.data) : null;
-  } catch {
-    // Pepper env missing — server misconfiguration, not a voter failure.
-    return unavailableCast();
+  const prep = prepareVoteCode(code);
+  if (!prep.ok) {
+    return prep.error;
   }
+  const { parsedCode, tokenHash } = prep;
+  const parsedCandidate = voteCandidateInputSchema.safeParse(candidateId);
 
   // Rate gate before the `cast_vote` transaction runs.
   const gate = await checkVoteGate(tokenHash, clientIp);
   if (!gate.allowed) {
-    return rateLimitedCast(gate.retryAfterSeconds);
+    return rateLimitedResult(gate.retryAfterSeconds);
   }
 
   const fail = (): CastFacultyVoteResult => {
     recordVoteFailure(tokenHash);
-    return castInvalid();
+    return invalidResult();
   };
 
   if (!parsedCode.success || !parsedCandidate.success) {
@@ -470,28 +421,23 @@ export async function resolveStudentBallot(
   code: string,
   clientIp?: string,
 ): Promise<ResolveStudentBallotResult> {
-  const parsedCode = voteCodeInputSchema.safeParse(code);
-
-  let tokenHash: string | null = null;
-  try {
-    // Same 12-character format and pepper as faculty Codes (spec §6).
-    tokenHash = parsedCode.success ? hashFacultyCode(parsedCode.data) : null;
-  } catch {
-    // Pepper env missing — server misconfiguration, not a voter failure.
-    return unavailableStudentResolve();
+  const prep = prepareVoteCode(code);
+  if (!prep.ok) {
+    return prep.error;
   }
+  const { parsedCode, tokenHash } = prep;
 
   // Rate gate before any token validation (no database lookup while gated).
   const gate = await checkVoteGate(tokenHash, clientIp);
   if (!gate.allowed) {
-    return rateLimitedStudentResolve(gate.retryAfterSeconds);
+    return rateLimitedResult(gate.retryAfterSeconds);
   }
 
   // Every INVALID outcome below counts one failure against this hash, so
   // repeated probing locks the hash while the message stays uniform.
   const fail = (): ResolveStudentBallotResult => {
     recordVoteFailure(tokenHash);
-    return invalidStudent();
+    return invalidResult();
   };
 
   if (!parsedCode.success) {
@@ -654,26 +600,22 @@ export async function castStudentVote(
   candidateId: string,
   clientIp?: string,
 ): Promise<CastStudentVoteResult> {
-  const parsedCode = voteCodeInputSchema.safeParse(code);
-  const parsedCandidate = voteCandidateInputSchema.safeParse(candidateId);
-
-  let tokenHash: string | null = null;
-  try {
-    tokenHash = parsedCode.success ? hashFacultyCode(parsedCode.data) : null;
-  } catch {
-    // Pepper env missing — server misconfiguration, not a voter failure.
-    return unavailableStudentCast();
+  const prep = prepareVoteCode(code);
+  if (!prep.ok) {
+    return prep.error;
   }
+  const { parsedCode, tokenHash } = prep;
+  const parsedCandidate = voteCandidateInputSchema.safeParse(candidateId);
 
   // Rate gate before the `cast_student_vote` transaction runs.
   const gate = await checkVoteGate(tokenHash, clientIp);
   if (!gate.allowed) {
-    return rateLimitedStudentCast(gate.retryAfterSeconds);
+    return rateLimitedResult(gate.retryAfterSeconds);
   }
 
   const fail = (): CastStudentVoteResult => {
     recordVoteFailure(tokenHash);
-    return castStudentInvalid();
+    return invalidResult();
   };
 
   if (!parsedCode.success || !parsedCandidate.success) {
@@ -732,27 +674,23 @@ export async function resolveVoteBallot(
   code: string,
   clientIp?: string,
 ): Promise<ResolveVoteBallotResult> {
-  const parsedCode = voteCodeInputSchema.safeParse(code);
-
-  let tokenHash: string | null = null;
-  try {
-    tokenHash = parsedCode.success ? hashFacultyCode(parsedCode.data) : null;
-  } catch {
-    // Pepper env missing — server misconfiguration, not a voter failure.
-    return unavailableUnifiedResolve();
+  const prep = prepareVoteCode(code);
+  if (!prep.ok) {
+    return prep.error;
   }
+  const { parsedCode, tokenHash } = prep;
 
   // Rate gate before any token validation (no database lookup while gated).
   const gate = await checkVoteGate(tokenHash, clientIp);
   if (!gate.allowed) {
-    return rateLimitedUnifiedResolve(gate.retryAfterSeconds);
+    return rateLimitedResult(gate.retryAfterSeconds);
   }
 
   // Every INVALID outcome below counts one failure against this hash, so
   // repeated probing locks the hash while the message stays uniform.
   const fail = (): ResolveVoteBallotResult => {
     recordVoteFailure(tokenHash);
-    return invalidUnified();
+    return invalidResult();
   };
 
   if (!parsedCode.success) {
@@ -947,12 +885,16 @@ export async function castBallot(
   candidateId: string,
   clientIp?: string,
 ): Promise<CastFacultyVoteResult> {
-  const parsedCode = voteCodeInputSchema.safeParse(code);
-  let tokenHash: string | null = null;
-  try {
-    tokenHash = parsedCode.success ? hashFacultyCode(parsedCode.data) : null;
-  } catch {
-    return unavailableCast();
+  const prep = prepareVoteCode(code);
+  if (!prep.ok) {
+    return prep.error;
+  }
+  const { tokenHash } = prep;
+
+  // Rate gate before any token validation (no DB lookup while gated).
+  const gate = await checkVoteGate(tokenHash, clientIp);
+  if (!gate.allowed) {
+    return rateLimitedResult(gate.retryAfterSeconds);
   }
 
   if (tokenHash) {

@@ -317,8 +317,11 @@ export default function HomePage() {
                   <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
                     No. The system is engineered so no record joins a voter or
                     code to a candidate choice. Once your vote is counted, your
-                    token is marked as used and the connection is permanently
-                    purged. Even system administrators see only aggregates.
+                    token is marked as used and the transient link is discarded.
+                    All admin interfaces display aggregates only, never voter-to-choice.
+                    The schema carries no join key between votes and tokens, though
+                    we do not claim mathematical unlinkability against raw database
+                    timing correlation.
                   </p>
                 </div>
               </div>
@@ -336,7 +339,7 @@ export default function HomePage() {
                     an automated tie alert holds that department while others
                     advance. Ties are resolved strictly under a documented tie
                     policy locked in advance, and every resolution is recorded
-                    in the public audit log.
+                    in the admin audit log.
                   </p>
                 </div>
               </div>

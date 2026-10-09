@@ -12,3 +12,4 @@ export * from "./format";
 export * from "./hashing";
 export * from "./vote-link";
 export * from "./invalidation";
+export * from "./minting";

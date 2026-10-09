@@ -62,6 +62,8 @@ export const STUDENT_CODE_ACTION_ERROR_CODES = [
   "INVALID_INPUT",
   "NOT_FOUND",
   "NOT_PARTICIPATING",
+  "ALREADY_USED",
+  "NO_TOKEN",
   "CONFIG_ERROR",
   "DB_ERROR",
 ] as const;
@@ -69,11 +71,28 @@ export const STUDENT_CODE_ACTION_ERROR_CODES = [
 export type StudentCodeActionErrorCode =
   (typeof STUDENT_CODE_ACTION_ERROR_CODES)[number];
 
+export const invalidateStudentCodeSchema = z.object({
+  electionId: z.uuid(),
+  departmentId: z.uuid(),
+  code: z.string().optional(),
+  tokenId: z.uuid().optional(),
+});
+
+export type InvalidateStudentCodeInput = z.infer<
+  typeof invalidateStudentCodeSchema
+>;
+
+export const rotateStudentCodeSchema = z.object({
+  electionId: z.uuid(),
+  departmentId: z.uuid(),
+  code: z.string().optional(),
+  tokenId: z.uuid().optional(),
+});
+
+export type RotateStudentCodeInput = z.infer<typeof rotateStudentCodeSchema>;
+
 /**
- * Generation result state. On success `issued` carries exactly the
- * requested quantity of NEW Codes (a partial batch only when the database
- * refused a mid-batch write — Codes already issued stay valid and are
- * still returned); on failure it is absent.
+ * Generation / Invalidation / Rotation result state.
  */
 export type StudentCodeActionState =
   | {

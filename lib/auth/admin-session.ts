@@ -104,3 +104,26 @@ export async function requireAdminSession(
 
   return adapter.resolve();
 }
+
+export interface AdminContext {
+  adminId: string;
+}
+
+export type AdminGateResult<TState> =
+  | { ok: true; context: AdminContext }
+  | { ok: false; state: TState };
+
+/**
+ * Standard gate for Server Actions requiring admin authentication and allowlist membership.
+ * Automatically maps failure into the action error state shape.
+ */
+export async function requireAdminGate<TState = AdminAuthError>(
+  options?: RequireAdminSessionOptions,
+): Promise<AdminGateResult<TState>> {
+  const result = await requireAdminSession(options);
+  if (!result.ok) {
+    return { ok: false, state: result as unknown as TState };
+  }
+  return { ok: true, context: { adminId: result.session.adminId } };
+}
+

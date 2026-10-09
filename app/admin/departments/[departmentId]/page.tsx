@@ -6,6 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getDepartmentDrilldown } from "@/lib/dashboard/queries";
 import { listElections } from "@/lib/election/queries";
 
+import {
+  DrilldownPublishControl,
+  DrilldownResolveStage1TieForm,
+  DrilldownResolveStage2TieForm,
+} from "./controls";
+
 export const metadata: Metadata = {
   title: "Department Drill-Down · Admin",
   description:
@@ -139,6 +145,23 @@ export default async function AdminDepartmentDrilldownPage({
       ? (row.stage2.winnerResult.winner?.finalistId ?? null)
       : null;
 
+  const isFinalStage =
+    election.stage === "FINAL_RESULTS" || election.stage === "CLOSED";
+  const canPublish =
+    row.participating &&
+    row.finalistsLockedAt !== null &&
+    policyVersion !== null &&
+    !row.tiePending &&
+    isFinalStage &&
+    !row.stage2.published?.published;
+  const publishDisabledReason = row.stage2.published?.published
+    ? "Winner already published for this department."
+    : row.tiePending
+      ? "Resolve pending winner tie before publishing."
+      : !isFinalStage
+        ? "Publishing is available after student voting closes (stage FINAL_RESULTS)."
+        : undefined;
+
   return (
     <section aria-labelledby="drilldown-heading" className="flex flex-col gap-4">
       <div>
@@ -192,7 +215,7 @@ export default async function AdminDepartmentDrilldownPage({
               className="rounded-lg border border-destructive bg-destructive/10 p-3"
             >
               {stage1Tie ? (
-                <>
+                <div>
                   <p className="text-sm font-semibold text-destructive">
                     Tie detected for 3rd place
                   </p>
@@ -201,23 +224,34 @@ export default async function AdminDepartmentDrilldownPage({
                     {stage1Tie.cutoffVotes} votes with{" "}
                     {stage1Tie.seatsRemaining} seat
                     {stage1Tie.seatsRemaining === 1 ? "" : "s"} left. Resolve
-                    on the Faculty Results page — Ties never auto-resolve.
+                    below or on the Faculty Results page — Ties never auto-resolve.
                   </p>
-                </>
+                  <DrilldownResolveStage1TieForm
+                    electionId={election.id}
+                    departmentId={row.department.id}
+                    tied={stage1Tie.tied}
+                    seatsRemaining={stage1Tie.seatsRemaining}
+                    cutoffVotes={stage1Tie.cutoffVotes}
+                  />
+                </div>
               ) : null}
               {stage2Tie ? (
-                <>
-                  <p
-                    className={`text-sm font-semibold text-destructive${stage1Tie ? " mt-3" : ""}`}
-                  >
+                <div className={stage1Tie ? "mt-4 pt-4 border-t border-destructive/20" : ""}>
+                  <p className="text-sm font-semibold text-destructive">
                     Tie detected for winner
                   </p>
                   <p className="mt-1 text-sm text-destructive">
                     {stage2Tie.tied.length} Finalists share {stage2Tie.topVotes}{" "}
-                    votes. Resolve on the Final Results page — Ties never
+                    votes. Resolve below or on the Final Results page — Ties never
                     auto-resolve.
                   </p>
-                </>
+                  <DrilldownResolveStage2TieForm
+                    electionId={election.id}
+                    departmentId={row.department.id}
+                    tied={stage2Tie.tied}
+                    topVotes={stage2Tie.topVotes}
+                  />
+                </div>
               ) : null}
             </div>
           ) : null}
@@ -434,12 +468,22 @@ export default async function AdminDepartmentDrilldownPage({
               {row.stage2.published?.published === true ? (
                 <div className="rounded-lg border border-primary bg-primary/5 p-3">
                   <p className="text-sm font-semibold">
-                    Winner: {row.stage2.published.winnerFullName}
+                    Winner: {row.stage2.published.winnerFullName} (Published)
                   </p>
                 </div>
               ) : null}
             </CardContent>
           </Card>
+
+          {!row.stage2.published?.published ? (
+            <DrilldownPublishControl
+              electionId={election.id}
+              departmentId={row.department.id}
+              departmentCode={row.department.code}
+              canPublish={canPublish}
+              disabledReason={publishDisabledReason}
+            />
+          ) : null}
 
           <nav aria-label="Resolve or publish" className="flex flex-wrap gap-2">
             <Link

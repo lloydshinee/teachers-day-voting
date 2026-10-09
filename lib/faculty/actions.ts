@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 
 import { logFacultyAudit } from "@/lib/audit/hook";
 import { createClient } from "@/lib/supabase/server";
-import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 import {
   archiveFacultySchema,
@@ -80,83 +79,32 @@ function dbError(code: string | null): FacultyActionState {
   };
 }
 
+import { processImageUpload } from "@/lib/storage/upload-image";
+import { generateMissingFacultyCodes } from "./code-actions";
+
 const ALLOWED_IMAGE_TYPES = [
   "image/jpeg",
   "image/png",
   "image/webp",
   "image/gif",
 ];
-const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 async function processPictureUpload(
   formData: FormData,
   facultyId?: string,
 ): Promise<{ ok: true; url?: string | null } | { ok: false; message: string }> {
-  if (formData.get("removePicture") === "true") {
-    return { ok: true, url: null };
+  const result = await processImageUpload({
+    formData,
+    bucket: "faculty-photos",
+    folder: "faculty",
+    entityId: facultyId,
+    allowedTypes: ALLOWED_IMAGE_TYPES,
+    entityLabel: "Faculty",
+  });
+  if (!result.ok) {
+    return { ok: false, message: result.message };
   }
-
-  const file = formData.get("picture");
-  if (
-    file &&
-    typeof file === "object" &&
-    "size" in file &&
-    (file as File).size > 0
-  ) {
-    const f = file as File;
-    if (f.size > MAX_IMAGE_SIZE_BYTES) {
-      return { ok: false, message: "Image must be 5MB or smaller." };
-    }
-    if (!ALLOWED_IMAGE_TYPES.includes(f.type)) {
-      return {
-        ok: false,
-        message: "Image must be JPEG, PNG, WebP, or GIF format.",
-      };
-    }
-
-    const ext = f.name.split(".").pop()?.toLowerCase() || "jpg";
-    const fileId = facultyId ?? crypto.randomUUID();
-    const filePath = `faculty/${fileId}-${Date.now()}.${ext}`;
-
-    const serviceRole = createServiceRoleClient();
-    const arrayBuffer = await f.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    const { error: uploadError } = await serviceRole.storage
-      .from("faculty-photos")
-      .upload(filePath, buffer, {
-        contentType: f.type,
-        upsert: true,
-      });
-
-    if (uploadError) {
-      return {
-        ok: false,
-        message: "Failed to upload image. Please try again.",
-      };
-    }
-
-    const { data: urlData } = serviceRole.storage
-      .from("faculty-photos")
-      .getPublicUrl(filePath);
-
-    return { ok: true, url: urlData.publicUrl };
-  }
-
-  const pictureUrlRaw = formData.get("pictureUrl");
-  if (typeof pictureUrlRaw === "string") {
-    const trimmed = pictureUrlRaw.trim();
-    if (trimmed !== "") {
-      try {
-        new URL(trimmed);
-        return { ok: true, url: trimmed };
-      } catch {
-        return { ok: false, message: "Please provide a valid image URL." };
-      }
-    }
-  }
-
-  return { ok: true, url: undefined };
+  return { ok: true, url: result.url };
 }
 
 export async function createFaculty(
@@ -230,10 +178,29 @@ export async function createFaculty(
     actorAdminId: gate.context.adminId,
   });
 
+  const rawElectionId = formData.get("electionId");
+  const generateCode = formData.get("generateCode") === "true";
+  let codeSuffix = "";
+
+  if (generateCode && typeof rawElectionId === "string" && rawElectionId !== "") {
+    const codeFormData = new FormData();
+    codeFormData.set("electionId", rawElectionId);
+    codeFormData.set("departmentId", parsed.data.departmentId);
+    codeFormData.set("facultyId", row.data.id);
+    const codeResult = await generateMissingFacultyCodes(
+      { ok: true, message: "", electionId: rawElectionId, issued: [] },
+      codeFormData,
+    );
+    if (codeResult.ok && codeResult.issued.length > 0) {
+      const issued = codeResult.issued[0];
+      codeSuffix = ` Generated voting code: ${issued?.code}`;
+    }
+  }
+
   revalidatePath(FACULTY_PATH);
   return {
     ok: true,
-    message: `${row.data.full_name} added.`,
+    message: `${row.data.full_name} added.${codeSuffix}`,
   };
 }
 

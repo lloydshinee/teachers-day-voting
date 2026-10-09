@@ -46,7 +46,7 @@
  * names, and error codes.
  */
 
-import { createHash, randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -61,11 +61,7 @@ import {
   applyReopenStage1,
   applyResolveTie,
 } from "../election/actions.js";
-import {
-  CODE_ALPHABET,
-  CODE_LETTER_COUNT,
-  formatFacultyCode,
-} from "../faculty/code-format.js";
+import { generateCode } from "../tokens/format.js";
 import { computeStage1Cutoff } from "../stage1/counting.js";
 import { computeStage2Winner } from "../stage2/counting.js";
 import type { GlobalAdminAction } from "../election/stages.js";
@@ -258,17 +254,6 @@ function sha256Hex(input: string): string {
   return createHash("sha256").update(input, "utf8").digest("hex");
 }
 
-function randomDisplayCode(): string {
-  let letters = "";
-  for (let i = 0; i < CODE_LETTER_COUNT; i += 1) {
-    const draw = CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
-    if (draw === undefined) {
-      throw new Error("Code alphabet draw out of range.");
-    }
-    letters += draw;
-  }
-  return formatFacultyCode(letters);
-}
 
 /**
  * Hashes a display Code exactly as Code entry does: strip dashes and
@@ -392,7 +377,7 @@ async function mintToken(
   },
 ): Promise<{ tokenHash: string; display: string }> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const display = randomDisplayCode();
+    const display = generateCode();
     const tokenHash = hashForEntry(display, input.pepper);
     if (input.seenHashes.has(tokenHash)) {
       continue;

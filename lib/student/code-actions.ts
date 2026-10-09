@@ -3,14 +3,19 @@
 import { revalidatePath } from "next/cache";
 
 import { logStudentAudit } from "@/lib/audit/hook";
-import { generateFacultyCode } from "@/lib/faculty/code-format";
-import { hashNormalizedCodeLetters } from "@/lib/faculty/codes";
+import {
+  mintVotingToken,
+  invalidateStudentToken,
+  rotateStudentToken,
+} from "@/lib/tokens";
 import { facultyDepartmentRowSchema } from "@/lib/faculty/schemas";
 import { createClient } from "@/lib/supabase/server";
 import { getTokenPepper } from "@/lib/supabase/server-env";
 
 import {
   generateStudentCodesSchema,
+  invalidateStudentCodeSchema,
+  rotateStudentCodeSchema,
   type IssuedStudentCode,
   type StudentCodeActionState,
 } from "./schemas";
@@ -39,8 +44,6 @@ import {
  */
 
 const CODES_PATH = "/admin/student/codes";
-
-const MAX_HASH_RETRIES = 5;
 
 import { requireAdminSession } from "@/lib/auth/admin-session";
 
@@ -195,38 +198,17 @@ export async function generateStudentCodes(
   const issued: IssuedStudentCode[] = [];
   const batchLetters = new Set<string>();
   for (let n = 0; n < quantity; n += 1) {
-    let inserted = false;
-    for (
-      let attempt = 0;
-      attempt < MAX_HASH_RETRIES && !inserted;
-      attempt += 1
-    ) {
-      const code = generateFacultyCode();
-      const letters = code.replace(/-/g, "");
-      if (batchLetters.has(letters)) {
-        continue;
-      }
-      // Hash only — the raw Code never reaches the database. NULL faculty
-      // link: STUDENT Tokens belong to a department, never a faculty row.
-      const tokenHash = hashNormalizedCodeLetters(letters);
-      const { error: insertError } = await supabase
-        .from("voting_tokens")
-        .insert({
-          election_id: electionId,
-          department_id: departmentId,
-          token_hash: tokenHash,
-          token_type: "STUDENT",
-          faculty_id: null,
-        });
-      if (insertError) {
-        // Unique-violation backstop (code 23505): discard the Code and mint
-        // a fresh one. Any other rejection aborts the batch — Codes already
-        // issued stay valid and are still returned below.
-        if (insertError.code === "23505") {
-          continue;
-        }
+    const mintResult = await mintVotingToken(supabase, {
+      electionId,
+      departmentId,
+      tokenType: "STUDENT",
+      facultyId: null,
+      batchLetters,
+    });
+    if (!mintResult.ok) {
+      if (mintResult.error === "DB_ERROR") {
         if (issued.length === 0) {
-          return dbError(insertError.code);
+          return dbError(mintResult.dbErrorCode ?? null);
         }
         await logStudentAudit({
           action: "GENERATE_STUDENT_CODES",
@@ -239,21 +221,12 @@ export async function generateStudentCodes(
           ok: true,
           message:
             `Issued ${issued.length} of ${quantity} Codes before the database refused a write ` +
-            `(code ${insertError.code}). The Codes below are valid — export or print them now, then generate more for the rest.`,
+            `(code ${mintResult.dbErrorCode}). The Codes below are valid — export or print them now, then generate more for the rest.`,
           electionId,
           departmentId,
           issued,
         };
       }
-      inserted = true;
-      batchLetters.add(letters);
-      issued.push({
-        departmentId,
-        departmentCode: department.code,
-        code,
-      });
-    }
-    if (!inserted) {
       await logStudentAudit({
         action: "GENERATE_STUDENT_CODES",
         electionId,
@@ -271,6 +244,11 @@ export async function generateStudentCodes(
         issued,
       };
     }
+    issued.push({
+      departmentId,
+      departmentCode: department.code,
+      code: mintResult.code,
+    });
   }
 
   // Token-use audit WITHOUT choice (spec §§3, 7): election + department +
@@ -292,5 +270,162 @@ export async function generateStudentCodes(
     electionId,
     departmentId,
     issued,
+  };
+}
+
+/**
+ * Manually invalidates an unused student voting Token (spec §6).
+ */
+export async function invalidateStudentCode(
+  _prevState: StudentCodeActionState,
+  formData: FormData,
+): Promise<StudentCodeActionState> {
+  const parsed = invalidateStudentCodeSchema.safeParse({
+    electionId: formData.get("electionId"),
+    departmentId: formData.get("departmentId"),
+    code: formData.get("code") || undefined,
+    tokenId: formData.get("tokenId") || undefined,
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      code: "INVALID_INPUT",
+      message: "Invalid invalidation request. Check parameters and try again.",
+    };
+  }
+  const gate = await requireAdmin();
+  if (!gate.ok) {
+    return gate.state;
+  }
+  const { electionId, departmentId, code, tokenId } = parsed.data;
+  if (!code && !tokenId) {
+    return {
+      ok: false,
+      code: "INVALID_INPUT",
+      message: "Either a Code or Token ID must be provided to invalidate.",
+    };
+  }
+
+  const result = await invalidateStudentToken({
+    electionId,
+    departmentId,
+    code,
+    tokenId,
+  });
+
+  if (!result.ok || result.invalidated === 0) {
+    if (result.error === "ALREADY_USED") {
+      return {
+        ok: false,
+        code: "ALREADY_USED",
+        message: "This student Token has already been used and cannot be invalidated.",
+      };
+    }
+    return {
+      ok: false,
+      code: result.error === "DB_ERROR" ? "DB_ERROR" : "NOT_FOUND",
+      message: result.message ?? "No matching live unused student Token found.",
+    };
+  }
+
+  revalidatePath(CODES_PATH);
+  return {
+    ok: true,
+    message: "Student voting Code invalidated successfully.",
+    electionId,
+    departmentId,
+    issued: [],
+  };
+}
+
+/**
+ * Rotates an unused student voting Token (spec §6): invalidates the current
+ * Token and generates a replacement Code for the department.
+ */
+export async function rotateStudentCode(
+  _prevState: StudentCodeActionState,
+  formData: FormData,
+): Promise<StudentCodeActionState> {
+  const parsed = rotateStudentCodeSchema.safeParse({
+    electionId: formData.get("electionId"),
+    departmentId: formData.get("departmentId"),
+    code: formData.get("code") || undefined,
+    tokenId: formData.get("tokenId") || undefined,
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      code: "INVALID_INPUT",
+      message: "Invalid rotation request. Check parameters and try again.",
+    };
+  }
+  const gate = await requireAdmin();
+  if (!gate.ok) {
+    return gate.state;
+  }
+  try {
+    getTokenPepper();
+  } catch {
+    return {
+      ok: false,
+      code: "CONFIG_ERROR",
+      message:
+        "Code issuance is not configured on this server. Ask the operator to check the setup.",
+    };
+  }
+
+  const { electionId, departmentId, code, tokenId } = parsed.data;
+  if (!code && !tokenId) {
+    return {
+      ok: false,
+      code: "INVALID_INPUT",
+      message: "Either a Code or Token ID must be provided to rotate.",
+    };
+  }
+
+  const supabase = await createClient();
+  const { data: dept } = await supabase
+    .from("departments")
+    .select("code")
+    .eq("id", departmentId)
+    .maybeSingle();
+
+  const result = await rotateStudentToken({
+    electionId,
+    departmentId,
+    code,
+    tokenId,
+  });
+
+  if (!result.ok || !result.code) {
+    if (result.error === "ALREADY_USED") {
+      return {
+        ok: false,
+        code: "ALREADY_USED",
+        message:
+          result.message ??
+          "This student Token has already been used and cannot be rotated.",
+      };
+    }
+    return {
+      ok: false,
+      code: result.error === "DB_ERROR" ? "DB_ERROR" : "NOT_FOUND",
+      message: result.message ?? "Rotation failed. No matching live unused Token found.",
+    };
+  }
+
+  revalidatePath(CODES_PATH);
+  return {
+    ok: true,
+    message: `Rotated student voting Code. Shown once below — export or print now; it cannot be recovered.`,
+    electionId,
+    departmentId,
+    issued: [
+      {
+        departmentId,
+        departmentCode: dept?.code ?? "",
+        code: result.code,
+      },
+    ],
   };
 }

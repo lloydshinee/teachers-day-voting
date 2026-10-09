@@ -56,16 +56,25 @@ function ActionMessage({ state }: { state: FacultyActionState }) {
   );
 }
 
+export interface FacultyManagerElection {
+  id: string;
+  name: string;
+  academic_year: string;
+  stage: string;
+}
+
 export function CreateFacultyModal({
   open,
   onOpenChange,
   departments,
   initialDepartmentId,
+  elections = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   departments: FacultyDepartmentRow[];
   initialDepartmentId?: string;
+  elections?: FacultyManagerElection[];
 }) {
   const [state, formAction, isPending] = useActionState(
     createFaculty,
@@ -73,6 +82,11 @@ export function CreateFacultyModal({
   );
   const formRef = useRef<HTMLFormElement>(null);
   const fullNameRef = useRef<HTMLInputElement>(null);
+
+  const [selectedElectionId, setSelectedElectionId] = useState<string>(
+    elections[0]?.id || "",
+  );
+  const [generateCode, setGenerateCode] = useState<boolean>(true);
 
   // Preserve the chosen department so the user doesn't have to re-select each time!
   const [selectedDeptId, setSelectedDeptId] = useState<string>(
@@ -165,6 +179,45 @@ export function CreateFacultyModal({
             Optional faculty picture (JPEG, PNG, WebP, max 5MB).
           </p>
         </div>
+
+        {elections.length > 0 ? (
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 flex flex-col gap-2">
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-foreground">
+              <input
+                type="checkbox"
+                name="generateCode"
+                value="true"
+                checked={generateCode}
+                onChange={(e) => setGenerateCode(e.target.checked)}
+                className="size-4 rounded accent-primary"
+              />
+              <span>Generate Voting Code (one-click)</span>
+            </label>
+            {generateCode ? (
+              <div className="flex flex-col gap-1 mt-1">
+                <Label htmlFor="election-select" className="text-[11px] text-muted-foreground">
+                  Target Election
+                </Label>
+                <select
+                  id="election-select"
+                  name="electionId"
+                  className={SELECT_CLASS}
+                  value={selectedElectionId}
+                  onChange={(e) => setSelectedElectionId(e.target.value)}
+                >
+                  {elections.map((elec) => (
+                    <option key={elec.id} value={elec.id}>
+                      {elec.name} ({elec.academic_year}) · {elec.stage}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-muted-foreground">
+                  Issues a single-use voting Code for this faculty member in the selected election.
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <ActionMessage state={state} />
 
@@ -498,11 +551,14 @@ export function FacultyManager({
   groups,
   departments,
   totalEligible,
+  totalArchived: _totalArchived,
+  elections = [],
 }: {
   groups: DepartmentFacultyGroup[];
   departments: FacultyDepartmentRow[];
   totalEligible: number;
   totalArchived?: number;
+  elections?: FacultyManagerElection[];
 }) {
   const [search, setSearch] = useState("");
   const [selectedDeptId, setSelectedDeptId] = useState<string>("ALL");
@@ -699,6 +755,7 @@ export function FacultyManager({
         onOpenChange={setAddModalOpen}
         departments={departments}
         initialDepartmentId={selectedDeptId !== "ALL" ? selectedDeptId : undefined}
+        elections={elections}
       />
     </div>
   );

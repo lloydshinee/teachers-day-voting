@@ -222,6 +222,23 @@ export const stage2AuditDetailsSchema = z.strictObject({
 
 export type Stage2AuditDetails = z.infer<typeof stage2AuditDetailsSchema>;
 
+export const electionAuditDetailsSchema = z.strictObject({
+  /** Election name; null for transition actions. */
+  electionName: z.string().min(1).nullable(),
+  /** Academic year; null for transition actions. */
+  academicYear: z.string().min(1).nullable(),
+  /** Frozen tie_policy_locked_at version; null when not frozen yet. */
+  policyVersion: z.iso.datetime({ offset: true }).nullable(),
+  /** Number of linked participating departments; null for transitions. */
+  departmentCount: z.number().int().min(0).nullable(),
+  /** Prior stage before transition; null for create. */
+  fromStage: z.string().min(1).nullable(),
+  /** New stage after transition; null for create. */
+  toStage: z.string().min(1).nullable(),
+});
+
+export type ElectionAuditDetails = z.infer<typeof electionAuditDetailsSchema>;
+
 /** Envelope for the `audit_logs` columns (details validated per family). */
 export const auditRowEnvelopeSchema = z.strictObject({
   electionId: z.uuid().nullable(),
@@ -306,6 +323,22 @@ export function isCompliantStage2DetailsForAction(
   }
 }
 
+export function isCompliantElectionDetailsForAction(
+  action: string,
+  details: ElectionAuditDetails,
+): boolean {
+  switch (action) {
+    case "CREATE_ELECTION":
+      return details.electionName !== null && details.academicYear !== null;
+    case "OPEN_FACULTY_VOTING":
+    case "OPEN_STUDENT_VOTING":
+    case "CLOSE_ELECTION":
+      return details.fromStage !== null && details.toStage !== null;
+    default:
+      return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Action → schema map: the self-test scanner iterates this, so every action
 // persisted by `lib/audit/hook.ts` must appear here exactly once.
@@ -323,16 +356,20 @@ export const ALL_AUDIT_ACTIONS = [
   "INVALIDATE_FACULTY_TOKENS",
   "FACULTY_VOTE_CAST",
   "STUDENT_VOTE_CAST",
+  "CREATE_ELECTION",
+  "OPEN_FACULTY_VOTING",
   "CLOSE_FACULTY_VOTING",
   "FLAG_STAGE1_TIE",
   "RESOLVE_STAGE1_TIE",
   "FREEZE_STAGE1_FINALISTS",
   "REOPEN_STAGE1",
   "GENERATE_STUDENT_CODES",
+  "OPEN_STUDENT_VOTING",
   "CLOSE_STUDENT_VOTING",
   "FLAG_STAGE2_TIE",
   "RESOLVE_STAGE2_TIE",
   "PUBLISH_WINNER",
+  "CLOSE_ELECTION",
 ] as const;
 
 export type AuditAction = (typeof ALL_AUDIT_ACTIONS)[number];
@@ -349,14 +386,19 @@ export const AUDIT_DETAILS_SCHEMAS: Record<AuditAction, z.ZodType> = {
   INVALIDATE_FACULTY_TOKENS: facultyAuditDetailsSchema,
   FACULTY_VOTE_CAST: facultyVoteAuditDetailsSchema,
   STUDENT_VOTE_CAST: studentVoteAuditDetailsSchema,
+  CREATE_ELECTION: electionAuditDetailsSchema,
+  OPEN_FACULTY_VOTING: electionAuditDetailsSchema,
   CLOSE_FACULTY_VOTING: stage1AuditDetailsSchema,
   FLAG_STAGE1_TIE: stage1AuditDetailsSchema,
   RESOLVE_STAGE1_TIE: stage1AuditDetailsSchema,
   FREEZE_STAGE1_FINALISTS: stage1AuditDetailsSchema,
   REOPEN_STAGE1: stage1AuditDetailsSchema,
   GENERATE_STUDENT_CODES: studentAuditDetailsSchema,
+  OPEN_STUDENT_VOTING: electionAuditDetailsSchema,
   CLOSE_STUDENT_VOTING: stage2AuditDetailsSchema,
   FLAG_STAGE2_TIE: stage2AuditDetailsSchema,
   RESOLVE_STAGE2_TIE: stage2AuditDetailsSchema,
   PUBLISH_WINNER: stage2AuditDetailsSchema,
+  CLOSE_ELECTION: electionAuditDetailsSchema,
 };
+

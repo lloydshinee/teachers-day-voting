@@ -10,7 +10,7 @@ Loose idea §11 forbids silently resolving ties (e.g. 10-vs-10 for 3rd place) an
 
 Decide, via grilling + domain-modeling:
 
-- Manual admin pick (audit-logged) vs deterministic automatic rule (seniority / hire-date / random draw) vs runoff vote?
+- Manual admin pick (audit-logged) vs deterministic automatic rule (seniority / hire-date / random selection) vs runoff vote?
 - Where does the tie surface (faculty results → finalist generation gate) and what audit entry does resolution write?
 - What does the spec promise before the election begins?
 

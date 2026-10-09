@@ -76,8 +76,8 @@ function shapeKeys(action: string, schema: z.ZodType): string[] {
 check("every persisted action has exactly one details schema", () => {
   assert.equal(
     ALL_AUDIT_ACTIONS.length,
-    21,
-    `expected 21 audit actions, found ${ALL_AUDIT_ACTIONS.length}`,
+    25,
+    `expected 25 audit actions, found ${ALL_AUDIT_ACTIONS.length}`,
   );
   const mapped = Object.keys(AUDIT_DETAILS_SCHEMAS).sort();
   assert.deepEqual(mapped, [...ALL_AUDIT_ACTIONS].sort());
@@ -527,6 +527,42 @@ function validSampleFor(action: string): Record<string, unknown> {
         departmentId: DEPARTMENT_ID,
         policyVersion: POLICY_VERSION,
         pickedFinalistIds: null,
+      };
+    case "CREATE_ELECTION":
+      return {
+        electionName: "Teachers' Day 2026",
+        academicYear: "2026-2027",
+        policyVersion: null,
+        departmentCount: 5,
+        fromStage: null,
+        toStage: "DRAFT",
+      };
+    case "OPEN_FACULTY_VOTING":
+      return {
+        electionName: null,
+        academicYear: null,
+        policyVersion: POLICY_VERSION,
+        departmentCount: null,
+        fromStage: "DRAFT",
+        toStage: "FACULTY_VOTING",
+      };
+    case "OPEN_STUDENT_VOTING":
+      return {
+        electionName: null,
+        academicYear: null,
+        policyVersion: POLICY_VERSION,
+        departmentCount: null,
+        fromStage: "FACULTY_RESULTS",
+        toStage: "STUDENT_VOTING",
+      };
+    case "CLOSE_ELECTION":
+      return {
+        electionName: null,
+        academicYear: null,
+        policyVersion: POLICY_VERSION,
+        departmentCount: null,
+        fromStage: "FINAL_RESULTS",
+        toStage: "CLOSED",
       };
     default:
       throw new Error(`no valid sample for unknown action ${action}`);

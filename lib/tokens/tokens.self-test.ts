@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   CODE_ALPHABET,
   normalizeCode,
+  normalizeCodeLetters,
   codeSchema,
   generateCode,
 } from "./format";
@@ -34,6 +35,8 @@ function runTests() {
   assert.equal(normalized, "7K9P-X2MA-Q4LT");
   assert.equal(normalizeCode("7K9P-X2MA-Q4L0"), null, "Must reject confusable '0'");
   assert.equal(normalizeCode("7K9P"), null, "Must reject short code");
+  assert.equal(normalizeCodeLetters(rawWithSpaces), "7K9PX2MAQ4LT");
+  assert.equal(normalizeCodeLetters("7K9P-X2MA-Q4L0"), null);
   console.log("PASS normalization cleans dashes/case and rejects invalid symbols");
 
   // Test 4: Hashing with custom pepper
@@ -47,8 +50,16 @@ function runTests() {
 
   // Test 5: QR payload link construction
   assert.equal(buildVoteCodeLink("7K9P-X2MA-Q4LT"), "/vote?token=7K9P-X2MA-Q4LT");
+  assert.equal(
+    buildVoteCodeLink("7K9P-X2MA-Q4LT", "https://voting.school.edu"),
+    "https://voting.school.edu/vote?token=7K9P-X2MA-Q4LT",
+  );
+  assert.equal(
+    buildVoteCodeLink("7K9P-X2MA-Q4LT", "https://voting.school.edu/"),
+    "https://voting.school.edu/vote?token=7K9P-X2MA-Q4LT",
+  );
   assert.equal(VOTE_PATH, "/vote");
-  console.log("PASS QR link payload constructs /vote?token=<CODE> cleanly");
+  console.log("PASS QR link payload constructs /vote?token=<CODE> cleanly (relative and absolute)");
 
   console.log("\nTokens module suite: all 5 test groups passed.");
 }

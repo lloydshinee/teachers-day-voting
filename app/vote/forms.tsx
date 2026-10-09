@@ -189,7 +189,7 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
     step === "code"
       ? "Cast Your Vote"
       : step === "success"
-        ? "Ballot Submitted"
+        ? "Vote recorded."
         : voterType === "STUDENT"
           ? "Student Finalist Vote"
           : "Faculty Peer Vote";
@@ -463,31 +463,25 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
                 </div>
               ) : null}
 
-              {selectedCandidate ? (
-                <div className="flex flex-col items-center text-center gap-3 rounded-2xl border-2 border-primary/25 bg-gradient-to-b from-primary/10 via-primary/5 to-transparent p-5 shadow-2xs">
+              <div className="flex flex-col items-center text-center gap-3 rounded-2xl border-2 border-primary/25 bg-gradient-to-b from-primary/10 via-primary/5 to-transparent p-5 shadow-2xs">
+                {selectedCandidate ? (
                   <FacultyAvatar
                     name={selectedCandidate.fullName}
                     url={selectedCandidate.pictureUrl}
                     size="lg"
                   />
-                  <div>
-                    <span className="inline-block rounded-full bg-primary/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary mb-1">
-                      Your Selected Honoree
-                    </span>
-                    <h3 className="text-xl font-bold text-foreground">
-                      {selectedCandidate.fullName}
-                    </h3>
+                ) : null}
+                <div>
+                  <h3 className="text-xl font-bold text-foreground">
+                    You selected: {selectedName}
+                  </h3>
+                  {ballot ? (
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {ballot?.department.code} · {ballot?.department.name}
+                      {ballot.department.code} · {ballot.department.name}
                     </p>
-                  </div>
+                  ) : null}
                 </div>
-              ) : (
-                <p className="text-base text-center">
-                  You selected:{" "}
-                  <span className="font-semibold">{selectedName}</span>
-                </p>
-              )}
+              </div>
 
               <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 text-xs text-muted-foreground flex items-start gap-2.5">
                 <ShieldCheck className="size-4 text-primary shrink-0 mt-0.5" />
@@ -531,10 +525,10 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
 
             <div className="flex flex-col gap-1.5">
               <CardTitle className="text-2xl font-bold tracking-tight text-foreground">
-                Vote Successfully Cast!
+                Vote recorded.
               </CardTitle>
               <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                Your vote has been securely recorded into the encrypted tally.
+                Your vote has been securely recorded.
               </p>
             </div>
 

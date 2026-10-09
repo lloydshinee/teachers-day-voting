@@ -5,9 +5,11 @@
  * lookup happens while gated):
  *
  * - Per-IP sliding window: at most VOTE_IP_MAX_ATTEMPTS attempts per
- *   VOTE_IP_WINDOW_MS from one client IP. Generous enough for a NAT/lab full
- *   of legitimate voters, tight enough that guessing a 60-bit Code stays
- *   infeasible (60 attempts / 10 min ≈ 8.6k guesses/day/IP vs 2^60 Codes).
+ *   VOTE_IP_WINDOW_MS from one client IP. Sized generously for school labs
+ *   and campus Wi-Fi sharing a single NAT gateway (where each voter makes at
+ *   least 2 calls: resolve + cast), while keeping brute-force guessing against
+ *   the 60-bit Code infeasible (600 attempts / 10 min ≈ 86.4k guesses/day/IP vs 2^60 Codes).
+ *   Note: Rate limit state is in-process (in-memory) only.
  * - Per-token-hash failure budget: at most VOTE_TOKEN_MAX_FAILURES failures
  *   per VOTE_TOKEN_WINDOW_MS against one token hash, then a
  *   VOTE_TOKEN_LOCKOUT_MS temporary lockout. Stricter per-hash, so repeated
@@ -23,10 +25,10 @@
  * with a `Retry-After: <seconds>` header from that field.
  *
  * SINGLE-INSTANCE STORE: budgets live in module-global Maps, which is
- * correct for a single-instance deployment only. When scaling past one
- * instance, replace this module's backing with shared storage (e.g. Upstash
- * Redis sliding-window counters) behind the same exported function
- * signatures — callers in `./actions.js` must not change. The Maps are
+ * correct for a single-instance deployment only (state is in-process only).
+ * When scaling past one instance, replace this module's backing with shared
+ * storage (e.g. Upstash Redis sliding-window counters) behind the same exported
+ * function signatures — callers in `./actions.js` must not change. The Maps are
  * size-bounded (oldest-first eviction) so random-guess floods cannot grow
  * memory without limit; unknown-hash tracking is failure-only, and every
  * entry expires by the window/lockout clocks.
@@ -40,8 +42,12 @@
  * — raw Codes never enter this module.
  */
 
-/** Max attempts from one IP per sliding window (generous for shared NAT). */
-export const VOTE_IP_MAX_ATTEMPTS = 60;
+/**
+ * Max attempts from one IP per sliding window.
+ * Raised to 600 for schools sharing one NAT gateway (each voter makes at least 2 calls).
+ * Note: rate limit state is in-process (in-memory) only.
+ */
+export const VOTE_IP_MAX_ATTEMPTS = 600;
 
 /** Sliding-window length for the per-IP budget. */
 export const VOTE_IP_WINDOW_MS = 10 * 60 * 1000;
@@ -178,6 +184,40 @@ export function recordVoteSuccess(tokenHash: string | null): void {
     return;
   }
   tokenBuckets.delete(tokenHash);
+}
+
+/**
+ * Returns the number of remaining IP attempts in the current sliding window.
+ */
+export function getRemainingVoteAttempts(
+  ip: string,
+  nowMs: number = Date.now(),
+): number {
+  const key = normalizeIp(ip);
+  const windowStartMs = nowMs - VOTE_IP_WINDOW_MS;
+  const recent = pruneOlderThan(ipAttempts.get(key) ?? [], windowStartMs);
+  return Math.max(0, VOTE_IP_MAX_ATTEMPTS - recent.length);
+}
+
+/**
+ * Evaluates the rate limit for a client IP and optional token hash.
+ * Returns decision and remaining attempts.
+ */
+export function verifyVoteRateLimit(
+  ip: string,
+  tokenHash: string | null = null,
+  nowMs: number = Date.now(),
+): VoteRateLimitDecision & { remaining: number } {
+  const decision = consumeVoteAttempt(ip, tokenHash, nowMs);
+  const remaining = getRemainingVoteAttempts(ip, nowMs);
+  if (!decision.allowed) {
+    return {
+      allowed: false,
+      retryAfterSeconds: decision.retryAfterSeconds,
+      remaining,
+    };
+  }
+  return { allowed: true, remaining };
 }
 
 /** Test-only reset. Not called outside self-tests. */

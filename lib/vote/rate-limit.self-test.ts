@@ -81,7 +81,7 @@ function toRateLimitedResult(
 // ---------------------------------------------------------------------------
 
 check("budgets are pinned to the approved envelope", () => {
-  assert.equal(VOTE_IP_MAX_ATTEMPTS, 60);
+  assert.equal(VOTE_IP_MAX_ATTEMPTS, 600);
   assert.equal(VOTE_IP_WINDOW_MS, 10 * 60 * 1000);
   assert.equal(VOTE_TOKEN_MAX_FAILURES, 10);
   assert.equal(VOTE_TOKEN_WINDOW_MS, 10 * 60 * 1000);

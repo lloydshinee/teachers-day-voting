@@ -5,9 +5,13 @@ import { revalidatePath } from "next/cache";
 import { logFacultyAudit } from "@/lib/audit/hook";
 import { createClient } from "@/lib/supabase/server";
 import { getTokenPepper } from "@/lib/supabase/server-env";
+import { z } from "zod";
 
-import { generateFacultyCode } from "./code-format";
-import { hashNormalizedCodeLetters } from "./codes";
+import {
+  mintVotingToken,
+  invalidateFacultyToken,
+  rotateFacultyToken,
+} from "@/lib/tokens";
 import {
   facultyDepartmentRowSchema,
   facultyRowSchema,
@@ -15,6 +19,16 @@ import {
   type FacultyCodeActionState,
   type IssuedFacultyCode,
 } from "./schemas";
+
+const invalidateFacultyCodeSchema = z.object({
+  electionId: z.string().uuid(),
+  facultyId: z.string().uuid(),
+});
+
+const rotateFacultyCodeSchema = z.object({
+  electionId: z.string().uuid(),
+  facultyId: z.string().uuid(),
+});
 
 /**
  * Faculty Code generation (spec §14 task 8).
@@ -40,8 +54,6 @@ import {
  */
 
 const CODES_PATH = "/admin/faculty/codes";
-
-const MAX_HASH_RETRIES = 5;
 
 import { requireAdminSession } from "@/lib/auth/admin-session";
 
@@ -280,65 +292,27 @@ export async function generateMissingFacultyCodes(
       continue;
     }
 
-    let inserted = false;
-    for (let attempt = 0; attempt < MAX_HASH_RETRIES && !inserted; attempt += 1) {
-      const code = generateFacultyCode();
-      const letters = code.replace(/-/g, "");
-      if (batchLetters.has(letters)) {
-        continue;
-      }
-      // Hash only — the raw Code never reaches the database.
-      const tokenHash = hashNormalizedCodeLetters(letters);
-      const { error: insertError } = await supabase
-        .from("voting_tokens")
-        .insert({
-          election_id: electionId,
-          department_id: member.department_id,
-          token_hash: tokenHash,
-          token_type: "FACULTY",
-          faculty_id: member.id,
-        });
-      if (insertError) {
-        // Unique-violation backstop (code 23505): discard the Code and mint
-        // a fresh one. Any other rejection aborts the batch — Codes already
-        // issued stay valid and are still returned below.
-        if (insertError.code === "23505") {
-          continue;
-        }
+    const mintResult = await mintVotingToken(supabase, {
+      electionId,
+      departmentId: member.department_id,
+      tokenType: "FACULTY",
+      facultyId: member.id,
+      batchLetters,
+    });
+    if (!mintResult.ok) {
+      if (mintResult.error === "DB_ERROR") {
         if (issued.length === 0) {
-          return dbError(insertError.code);
+          return dbError(mintResult.dbErrorCode ?? null);
         }
         return {
           ok: true,
           message:
             `Issued ${issued.length} of ${candidates.length} Codes before the database refused a write ` +
-            `(code ${insertError.code}). The Codes below are valid — export or print them now, then retry for the rest.`,
+            `(code ${mintResult.dbErrorCode}). The Codes below are valid — export or print them now, then retry for the rest.`,
           electionId,
           issued,
         };
       }
-      inserted = true;
-      batchLetters.add(letters);
-      const department = departmentById.get(member.department_id);
-      issued.push({
-        facultyId: member.id,
-        fullName: member.full_name,
-        departmentId: member.department_id,
-        departmentCode: department?.code ?? "",
-        code,
-      });
-      // Token-use audit WITHOUT choice (spec §§3, 7): identity + action
-      // only. The raw Code is never part of any audit payload.
-      await logFacultyAudit({
-        action: "GENERATE_FACULTY_CODES",
-        facultyId: member.id,
-        archivedFacultyId: null,
-        departmentId: member.department_id,
-        fullName: member.full_name,
-        actorAdminId: gate.context.adminId,
-      });
-    }
-    if (!inserted) {
       return {
         ok: true,
         message:
@@ -348,6 +322,24 @@ export async function generateMissingFacultyCodes(
         issued,
       };
     }
+    const department = departmentById.get(member.department_id);
+    issued.push({
+      facultyId: member.id,
+      fullName: member.full_name,
+      departmentId: member.department_id,
+      departmentCode: department?.code ?? "",
+      code: mintResult.code,
+    });
+    // Token-use audit WITHOUT choice (spec §§3, 7): identity + action
+    // only. The raw Code is never part of any audit payload.
+    await logFacultyAudit({
+      action: "GENERATE_FACULTY_CODES",
+      facultyId: member.id,
+      archivedFacultyId: null,
+      departmentId: member.department_id,
+      fullName: member.full_name,
+      actorAdminId: gate.context.adminId,
+    });
   }
 
   revalidatePath(CODES_PATH);
@@ -368,5 +360,148 @@ export async function generateMissingFacultyCodes(
           `Shown once below — export or print now; they cannot be recovered.`,
     electionId,
     issued,
+  };
+}
+
+/**
+ * Manually invalidates a faculty member's live unused voting Token (spec §6).
+ */
+export async function invalidateFacultyCode(
+  _prevState: FacultyCodeActionState,
+  formData: FormData,
+): Promise<FacultyCodeActionState> {
+  const parsed = invalidateFacultyCodeSchema.safeParse({
+    electionId: formData.get("electionId"),
+    facultyId: formData.get("facultyId"),
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      code: "INVALID_INPUT",
+      message: "Invalid invalidation request. Check parameters and try again.",
+    };
+  }
+  const gate = await requireAdmin();
+  if (!gate.ok) {
+    return gate.state;
+  }
+  try {
+    const result = await invalidateFacultyToken(parsed.data.facultyId, {
+      electionId: parsed.data.electionId,
+      actorAdminId: gate.context.adminId,
+    });
+    if (result.invalidated === 0) {
+      return {
+        ok: false,
+        code: "NOT_FOUND",
+        message: "No live unused voting Token found for this faculty member.",
+      };
+    }
+    revalidatePath(CODES_PATH);
+    revalidatePath("/admin/faculty");
+    return {
+      ok: true,
+      message: "Voting Token invalidated successfully.",
+      electionId: parsed.data.electionId,
+      issued: [],
+    };
+  } catch {
+    return dbError(null);
+  }
+}
+
+/**
+ * Rotates a faculty member's voting Token: invalidates the unused Token and
+ * issues a replacement Code (spec §6).
+ */
+export async function rotateFacultyCode(
+  _prevState: FacultyCodeActionState,
+  formData: FormData,
+): Promise<FacultyCodeActionState> {
+  const parsed = rotateFacultyCodeSchema.safeParse({
+    electionId: formData.get("electionId"),
+    facultyId: formData.get("facultyId"),
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      code: "INVALID_INPUT",
+      message: "Invalid rotation request. Check parameters and try again.",
+    };
+  }
+  const gate = await requireAdmin();
+  if (!gate.ok) {
+    return gate.state;
+  }
+  try {
+    getTokenPepper();
+  } catch {
+    return {
+      ok: false,
+      code: "CONFIG_ERROR",
+      message:
+        "Code issuance is not configured on this server. Ask the operator to check the setup.",
+    };
+  }
+
+  const supabase = await createClient();
+  const { data: faculty } = await supabase
+    .from("faculty")
+    .select("id, department_id, full_name")
+    .eq("id", parsed.data.facultyId)
+    .maybeSingle();
+
+  if (!faculty) {
+    return {
+      ok: false,
+      code: "NOT_FOUND",
+      message: "Faculty member not found.",
+    };
+  }
+
+  const { data: dept } = await supabase
+    .from("departments")
+    .select("code")
+    .eq("id", faculty.department_id)
+    .maybeSingle();
+
+  const rotationResult = await rotateFacultyToken(
+    parsed.data.electionId,
+    parsed.data.facultyId,
+    { actorAdminId: gate.context.adminId },
+  );
+
+  if (!rotationResult.ok || !rotationResult.code) {
+    if (rotationResult.error === "ALREADY_USED") {
+      return {
+        ok: false,
+        code: "INVALID_INPUT",
+        message:
+          rotationResult.message ??
+          "This faculty member has already cast a vote. Used Tokens cannot be rotated.",
+      };
+    }
+    return {
+      ok: false,
+      code: "DB_ERROR",
+      message: rotationResult.message ?? "Rotation failed. Try again.",
+    };
+  }
+
+  revalidatePath(CODES_PATH);
+  revalidatePath("/admin/faculty");
+  return {
+    ok: true,
+    message: `Rotated voting Code for ${faculty.full_name}. Shown once below — export or print now; it cannot be recovered.`,
+    electionId: parsed.data.electionId,
+    issued: [
+      {
+        facultyId: faculty.id,
+        fullName: faculty.full_name,
+        departmentId: faculty.department_id,
+        departmentCode: dept?.code ?? "",
+        code: rotationResult.code,
+      },
+    ],
   };
 }

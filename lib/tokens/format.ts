@@ -32,12 +32,19 @@ export function formatCode(letters: string): string {
   return groups.join("-");
 }
 
+declare const CodeBrand: unique symbol;
+/** Branded type for canonical Code string (spec §6, GLOSSARY.md). */
+export type Code = string & { readonly [CodeBrand]?: "Code" };
+
+export function asCode(value: string): Code {
+  return value as Code;
+}
+
 /**
- * Normalizes user/operator input to canonical display form:
- * uppercases, strips whitespace and dashes, then regroups.
+ * Normalizes user/operator input to raw uppercase letters (no dashes, no whitespace).
  * Returns null when the input cannot be a Code (wrong length or character outside alphabet).
  */
-export function normalizeCode(input: string): string | null {
+export function normalizeCodeLetters(input: string): string | null {
   const stripped = input.replace(/[\s-]+/g, "").toUpperCase();
   if (stripped.length !== CODE_LETTER_COUNT) {
     return null;
@@ -47,7 +54,20 @@ export function normalizeCode(input: string): string | null {
       return null;
     }
   }
-  return formatCode(stripped);
+  return stripped;
+}
+
+/**
+ * Normalizes user/operator input to canonical display form:
+ * uppercases, strips whitespace and dashes, then regroups.
+ * Returns null when the input cannot be a Code (wrong length or character outside alphabet).
+ */
+export function normalizeCode(input: string): string | null {
+  const letters = normalizeCodeLetters(input);
+  if (letters === null) {
+    return null;
+  }
+  return formatCode(letters);
 }
 
 /** Zod schema for a Code in canonical display form (`XXXX-XXXX-XXXX`). */
@@ -64,10 +84,10 @@ export type VotingCode = z.infer<typeof codeSchema>;
  * Generates one random Code using `crypto.randomInt` (uniform per symbol, never `Math.random`).
  * Dashes are presentation only — the 12 letters carry the entropy.
  */
-export function generateCode(): string {
+export function generateCode(): Code {
   let letters = "";
   for (let i = 0; i < CODE_LETTER_COUNT; i += 1) {
     letters += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
   }
-  return formatCode(letters);
+  return asCode(formatCode(letters));
 }

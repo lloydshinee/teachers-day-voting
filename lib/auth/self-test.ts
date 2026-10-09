@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   requireAdminSession,
+  requireAdminGate,
   DEFAULT_FORBIDDEN_MESSAGE,
   DEFAULT_UNAUTHENTICATED_MESSAGE,
   type AdminSessionAdapter,
@@ -80,7 +81,20 @@ async function runTests() {
   }
   console.log("PASS custom error messages supported");
 
-  console.log("\nAdmin session suite: all 4 tests passed.");
+  // Test 5: requireAdminGate helper
+  const gateSuccess = await requireAdminGate({ adapter: successAdapter });
+  assert.equal(gateSuccess.ok, true);
+  if (gateSuccess.ok) {
+    assert.equal(gateSuccess.context.adminId, "admin-123");
+  }
+  const gateFail = await requireAdminGate({ adapter: unauthAdapter });
+  assert.equal(gateFail.ok, false);
+  if (!gateFail.ok) {
+    assert.equal(gateFail.state.code, "UNAUTHENTICATED");
+  }
+  console.log("PASS requireAdminGate helper resolves context and errors");
+
+  console.log("\nAdmin session suite: all 5 tests passed.");
 }
 
 runTests().catch((err) => {

@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 
 import { logDepartmentAudit } from "@/lib/audit/hook";
 import { createClient } from "@/lib/supabase/server";
-import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 import {
   createDepartmentSchema,
@@ -70,6 +69,7 @@ function dbError(code: string | null): DepartmentActionState {
         : `Database rejected the change (code ${code}). Try again.`,
   };
 }
+import { processImageUpload } from "@/lib/storage/upload-image";
 
 const ALLOWED_IMAGE_TYPES = [
   "image/jpeg",
@@ -78,77 +78,23 @@ const ALLOWED_IMAGE_TYPES = [
   "image/gif",
   "image/svg+xml",
 ];
-const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 async function processDepartmentPictureUpload(
   formData: FormData,
   departmentId?: string,
 ): Promise<{ ok: true; url?: string | null } | { ok: false; message: string }> {
-  if (formData.get("removePicture") === "true") {
-    return { ok: true, url: null };
+  const result = await processImageUpload({
+    formData,
+    bucket: "department-photos",
+    folder: "departments",
+    entityId: departmentId,
+    allowedTypes: ALLOWED_IMAGE_TYPES,
+    entityLabel: "Department",
+  });
+  if (!result.ok) {
+    return { ok: false, message: result.message };
   }
-
-  const file = formData.get("picture");
-  if (
-    file &&
-    typeof file === "object" &&
-    "size" in file &&
-    (file as File).size > 0
-  ) {
-    const f = file as File;
-    if (f.size > MAX_IMAGE_SIZE_BYTES) {
-      return { ok: false, message: "Department image must be 5MB or smaller." };
-    }
-    if (!ALLOWED_IMAGE_TYPES.includes(f.type)) {
-      return {
-        ok: false,
-        message: "Image must be JPEG, PNG, WebP, GIF, or SVG format.",
-      };
-    }
-
-    const ext = f.name.split(".").pop()?.toLowerCase() || "png";
-    const fileId = departmentId ?? crypto.randomUUID();
-    const filePath = `departments/${fileId}-${Date.now()}.${ext}`;
-
-    const serviceRole = createServiceRoleClient();
-    const arrayBuffer = await f.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    const { error: uploadError } = await serviceRole.storage
-      .from("department-photos")
-      .upload(filePath, buffer, {
-        contentType: f.type,
-        upsert: true,
-      });
-
-    if (uploadError) {
-      return {
-        ok: false,
-        message: "Failed to upload department image. Please try again.",
-      };
-    }
-
-    const { data: urlData } = serviceRole.storage
-      .from("department-photos")
-      .getPublicUrl(filePath);
-
-    return { ok: true, url: urlData.publicUrl };
-  }
-
-  const pictureUrlRaw = formData.get("pictureUrl");
-  if (typeof pictureUrlRaw === "string") {
-    const trimmed = pictureUrlRaw.trim();
-    if (trimmed !== "") {
-      try {
-        new URL(trimmed);
-        return { ok: true, url: trimmed };
-      } catch {
-        return { ok: false, message: "Please provide a valid image URL." };
-      }
-    }
-  }
-
-  return { ok: true, url: undefined };
+  return { ok: true, url: result.url };
 }
 
 export async function createDepartment(

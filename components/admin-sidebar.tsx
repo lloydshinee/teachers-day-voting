@@ -5,12 +5,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Building2,
+  CheckSquare,
   ExternalLink,
   GraduationCap,
   KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
+  ScrollText,
+  Settings,
   ShieldCheck,
   Trophy,
   Users,
@@ -59,9 +62,24 @@ const NAV_ITEMS = [
     icon: GraduationCap,
   },
   {
+    href: "/admin/student/voting",
+    label: "Student Voting",
+    icon: CheckSquare,
+  },
+  {
     href: "/admin/final/results",
     label: "Final Results & Publish",
     icon: Trophy,
+  },
+  {
+    href: "/admin/settings",
+    label: "Settings",
+    icon: Settings,
+  },
+  {
+    href: "/admin/audit-logs",
+    label: "Audit Logs",
+    icon: ScrollText,
   },
 ];
 

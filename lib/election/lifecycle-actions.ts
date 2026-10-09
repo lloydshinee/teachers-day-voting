@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { requireAdminSession } from "../auth/admin-session";
+import { ADMIN_PATHS, PUBLIC_PATHS } from "../admin-paths";
+import { logElectionAudit } from "../audit/hook";
+import { requireAdminGate } from "../auth/admin-session";
 import {
   closeFacultyVoting,
   freezeStage1Finalists,
@@ -48,21 +50,13 @@ const createElectionInputSchema = z.object({
   departmentIds: z.array(z.string().uuid()).optional(),
 });
 
-interface AdminContext {
-  adminId: string;
-}
-
 async function requireAdmin(): Promise<
-  | { ok: true; context: AdminContext }
+  | { ok: true; context: { adminId: string } }
   | { ok: false; state: LifecycleActionState }
 > {
-  const result = await requireAdminSession({
+  return requireAdminGate<LifecycleActionState>({
     unauthenticatedMessage: "Sign in as an admin to manage elections.",
   });
-  if (!result.ok) {
-    return { ok: false, state: result };
-  }
-  return { ok: true, context: { adminId: result.session.adminId } };
 }
 
 /**
@@ -152,10 +146,22 @@ export async function createElection(
     }
   }
 
-  revalidatePath("/admin");
-  revalidatePath("/admin/faculty/codes");
-  revalidatePath("/admin/student/codes");
-  revalidatePath("/vote");
+  await logElectionAudit({
+    action: "CREATE_ELECTION",
+    electionId: newElection.id,
+    actorAdminId: gate.context.adminId,
+    electionName: parsed.data.name,
+    academicYear: parsed.data.academicYear,
+    policyVersion: null,
+    departmentCount: departmentIdsToLink.length,
+    fromStage: null,
+    toStage: "DRAFT",
+  });
+
+  revalidatePath(ADMIN_PATHS.DASHBOARD);
+  revalidatePath(ADMIN_PATHS.FACULTY_CODES);
+  revalidatePath(ADMIN_PATHS.STUDENT_CODES);
+  revalidatePath(PUBLIC_PATHS.VOTE);
 
   return {
     ok: true,
@@ -197,7 +203,7 @@ export async function transitionElectionStage(
         electionId,
       };
     }
-    revalidatePath("/admin");
+    revalidatePath(ADMIN_PATHS.DASHBOARD);
     return {
       ok: true,
       message: "Faculty voting closed. Election advanced to FACULTY_RESULTS.",
@@ -217,7 +223,7 @@ export async function transitionElectionStage(
         electionId,
       };
     }
-    revalidatePath("/admin");
+    revalidatePath(ADMIN_PATHS.DASHBOARD);
     return {
       ok: true,
       message: "Student voting closed. Election advanced to FINAL_RESULTS.",
@@ -230,7 +236,7 @@ export async function transitionElectionStage(
   // Read current election stage
   const { data: election, error: readError } = await supabase
     .from("elections")
-    .select("stage")
+    .select("stage, tie_policy_locked_at")
     .eq("id", electionId)
     .single();
 
@@ -294,13 +300,54 @@ export async function transitionElectionStage(
     };
   }
 
-  revalidatePath("/admin");
-  revalidatePath("/admin/faculty/codes");
-  revalidatePath("/admin/faculty/results");
-  revalidatePath("/admin/student/codes");
-  revalidatePath("/admin/final/results");
-  revalidatePath("/vote");
-  revalidatePath("/results");
+  const policyVersion =
+    updatePayload.tie_policy_locked_at ?? election.tie_policy_locked_at ?? null;
+
+  if (action === "OPEN_FACULTY_VOTING") {
+    await logElectionAudit({
+      action: "OPEN_FACULTY_VOTING",
+      electionId,
+      actorAdminId: gate.context.adminId,
+      electionName: null,
+      academicYear: null,
+      policyVersion,
+      departmentCount: null,
+      fromStage: currentStage,
+      toStage: "FACULTY_VOTING",
+    });
+  } else if (action === "OPEN_STUDENT_VOTING") {
+    await logElectionAudit({
+      action: "OPEN_STUDENT_VOTING",
+      electionId,
+      actorAdminId: gate.context.adminId,
+      electionName: null,
+      academicYear: null,
+      policyVersion,
+      departmentCount: null,
+      fromStage: currentStage,
+      toStage: "STUDENT_VOTING",
+    });
+  } else if (action === "CLOSE_ELECTION") {
+    await logElectionAudit({
+      action: "CLOSE_ELECTION",
+      electionId,
+      actorAdminId: gate.context.adminId,
+      electionName: null,
+      academicYear: null,
+      policyVersion,
+      departmentCount: null,
+      fromStage: currentStage,
+      toStage: "CLOSED",
+    });
+  }
+
+  revalidatePath(ADMIN_PATHS.DASHBOARD);
+  revalidatePath(ADMIN_PATHS.FACULTY_CODES);
+  revalidatePath(ADMIN_PATHS.FACULTY_RESULTS);
+  revalidatePath(ADMIN_PATHS.STUDENT_CODES);
+  revalidatePath(ADMIN_PATHS.FINAL_RESULTS);
+  revalidatePath(PUBLIC_PATHS.VOTE);
+  revalidatePath(PUBLIC_PATHS.RESULTS);
 
   return {
     ok: true,

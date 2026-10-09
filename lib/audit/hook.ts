@@ -6,8 +6,10 @@ import {
   assertNeverLogsChoicePlusIdentity,
   auditRowEnvelopeSchema,
   departmentAuditDetailsSchema,
+  electionAuditDetailsSchema,
   facultyAuditDetailsSchema,
   facultyVoteAuditDetailsSchema,
+  isCompliantElectionDetailsForAction,
   isCompliantStage1DetailsForAction,
   isCompliantStage2DetailsForAction,
   stage1AuditDetailsSchema,
@@ -494,6 +496,88 @@ export async function logStage2Audit(input: Stage2AuditInput): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Election lifecycle: creation, global stage transitions (spec §2a, §5).
+// ---------------------------------------------------------------------------
+
+export const ELECTION_AUDIT_ACTIONS = [
+  "CREATE_ELECTION",
+  "OPEN_FACULTY_VOTING",
+  "OPEN_STUDENT_VOTING",
+  "CLOSE_ELECTION",
+] as const;
+
+export type ElectionAuditAction = (typeof ELECTION_AUDIT_ACTIONS)[number];
+
+interface ElectionAuditBase {
+  electionId: string;
+  actorAdminId: string | null;
+}
+
+export type ElectionAuditInput =
+  | (ElectionAuditBase & {
+      action: "CREATE_ELECTION";
+      electionName: string;
+      academicYear: string;
+      policyVersion: null;
+      departmentCount: number;
+      fromStage: null;
+      toStage: "DRAFT";
+    })
+  | (ElectionAuditBase & {
+      action: "OPEN_FACULTY_VOTING";
+      electionName: null;
+      academicYear: null;
+      policyVersion: string | null;
+      departmentCount: null;
+      fromStage: string;
+      toStage: "FACULTY_VOTING";
+    })
+  | (ElectionAuditBase & {
+      action: "OPEN_STUDENT_VOTING";
+      electionName: null;
+      academicYear: null;
+      policyVersion: string | null;
+      departmentCount: null;
+      fromStage: string;
+      toStage: "STUDENT_VOTING";
+    })
+  | (ElectionAuditBase & {
+      action: "CLOSE_ELECTION";
+      electionName: null;
+      academicYear: null;
+      policyVersion: string | null;
+      departmentCount: null;
+      fromStage: string;
+      toStage: "CLOSED";
+    });
+
+/** Records one audit entry for an election lifecycle mutation or transition. */
+export async function logElectionAudit(
+  input: ElectionAuditInput,
+): Promise<void> {
+  const details = electionAuditDetailsSchema.safeParse({
+    electionName: input.electionName,
+    academicYear: input.academicYear,
+    policyVersion: input.policyVersion,
+    departmentCount: input.departmentCount,
+    fromStage: input.fromStage,
+    toStage: input.toStage,
+  });
+  if (!details.success) {
+    return;
+  }
+  if (!isCompliantElectionDetailsForAction(input.action, details.data)) {
+    return;
+  }
+  await persistAuditRow({
+    electionId: input.electionId,
+    actorAdminId: input.actorAdminId,
+    action: input.action,
+    details: details.data,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Compile-time coverage: every hook action must have a details schema in
 // `./details` (the self-test scanner's source of truth). A missing schema
 // fails the build here, not in production.
@@ -505,7 +589,8 @@ type AllHookActions =
   | VoteAuditAction
   | Stage1AuditAction
   | StudentAuditAction
-  | Stage2AuditAction;
+  | Stage2AuditAction
+  | ElectionAuditAction;
 
 // Compile-time check ensuring every action has a zod schema in AUDIT_DETAILS_SCHEMAS
 type MissingHookSchemas = Exclude<AllHookActions, keyof typeof AUDIT_DETAILS_SCHEMAS>;

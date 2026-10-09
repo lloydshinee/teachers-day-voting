@@ -53,25 +53,18 @@ import {
  * no Codes; error paths return generic messages.
  */
 
-const RESULTS_PATH = "/admin/final/results";
+import { ADMIN_PATHS, PUBLIC_PATHS } from "@/lib/admin-paths";
+import { requireAdminGate } from "@/lib/auth/admin-session";
 
-import { requireAdminSession } from "@/lib/auth/admin-session";
-
-interface AdminContext {
-  adminId: string;
-}
+const RESULTS_PATH = ADMIN_PATHS.FINAL_RESULTS;
 
 async function requireAdmin(): Promise<
-  | { ok: true; context: AdminContext }
+  | { ok: true; context: { adminId: string } }
   | { ok: false; state: Stage2ActionState }
 > {
-  const result = await requireAdminSession({
+  return requireAdminGate<Stage2ActionState>({
     unauthenticatedMessage: "Sign in as an admin to manage final results.",
   });
-  if (!result.ok) {
-    return { ok: false, state: result };
-  }
-  return { ok: true, context: { adminId: result.session.adminId } };
 }
 
 const STATE_MACHINE_CODES: ReadonlySet<string> = new Set([
@@ -619,7 +612,7 @@ export async function publishStage2Winner(
   });
 
   revalidatePath(RESULTS_PATH);
-  revalidatePath("/results");
+  revalidatePath(PUBLIC_PATHS.RESULTS);
   return {
     ok: true,
     message: `Winner published for ${tally.department.code}.`,
@@ -630,23 +623,61 @@ type SupabaseAdminClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * Elections with no participation rows yet treat every department as
- * participating, so a flag/publish needs its gate row created first.
+ * participating. To prevent inserting a single row and dropping all other
+ * departments, ensure all departments are linked before updating markers.
  */
 async function ensureParticipationRow(
   supabase: SupabaseAdminClient,
   scope: Stage2DepartmentScope,
 ): Promise<{ ok: true } | { ok: false; state: Stage2ActionState }> {
-  const { error } = await supabase
+  const { count, error: countError } = await supabase
     .from("election_departments")
-    .upsert(
-      {
-        election_id: scope.electionId,
-        department_id: scope.departmentId,
-      },
-      { onConflict: "election_id,department_id", ignoreDuplicates: true },
-    );
-  if (error) {
-    return { ok: false, state: dbError(error.code) };
+    .select("department_id", { count: "exact", head: true })
+    .eq("election_id", scope.electionId);
+
+  if (countError) {
+    return { ok: false, state: dbError(countError.code) };
   }
+
+  if (count === 0) {
+    const { data: allDepts, error: deptsError } = await supabase
+      .from("departments")
+      .select("id");
+
+    if (deptsError) {
+      return { ok: false, state: dbError(deptsError.code) };
+    }
+
+    if (allDepts && allDepts.length > 0) {
+      const rows = allDepts.map((d) => ({
+        election_id: scope.electionId,
+        department_id: d.id,
+      }));
+      const { error: seedError } = await supabase
+        .from("election_departments")
+        .upsert(rows, {
+          onConflict: "election_id,department_id",
+          ignoreDuplicates: true,
+        });
+
+      if (seedError) {
+        return { ok: false, state: dbError(seedError.code) };
+      }
+    }
+  } else {
+    const { error } = await supabase
+      .from("election_departments")
+      .upsert(
+        {
+          election_id: scope.electionId,
+          department_id: scope.departmentId,
+        },
+        { onConflict: "election_id,department_id", ignoreDuplicates: true },
+      );
+    if (error) {
+      return { ok: false, state: dbError(error.code) };
+    }
+  }
+
   return { ok: true };
 }
