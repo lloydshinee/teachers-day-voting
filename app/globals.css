@@ -237,7 +237,8 @@
 
 @media print {
   @page {
-    margin: 12mm;
+    margin: 8mm;
+    size: auto;
   }
 
   html,
@@ -255,27 +256,101 @@
     display: block !important;
   }
 
+  /* Force page break between departments so each department prints on separate bond paper */
+  .code-sheet-department-section {
+    break-after: page !important;
+    page-break-after: always !important;
+    margin-bottom: 0 !important;
+  }
+
+  .code-sheet-department-section:last-child {
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
+
+  .code-sheet-dept-header {
+    margin-bottom: 0.35rem !important;
+    padding-bottom: 0.2rem !important;
+    border-bottom: 2px solid #000 !important;
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Grid for Faculty codes: 3 columns (fits 12 slips per bond paper) */
   .code-sheet-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.6rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 0.35rem !important;
+  }
+
+  /* Grid for Student codes: 4 columns (fits 16 slips per bond paper) */
+  .code-sheet-student .code-sheet-list {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 0.3rem !important;
   }
 
   .code-slip {
-    border: 1px solid #000 !important;
-    border-radius: 0;
+    border: 1px dashed #555 !important;
+    border-radius: 4px !important;
     box-shadow: none !important;
     break-inside: avoid;
     page-break-inside: avoid;
+    padding: 0.45rem !important;
+    gap: 0.25rem !important;
   }
 
-  .code-slip-kind,
-  .code-slip-rule {
-    color: #000 !important;
+  .code-slip-event {
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+  }
+
+  .code-slip-kind {
+    font-size: 0.6rem !important;
+    color: #222 !important;
+  }
+
+  .code-slip-department {
+    font-size: 0.68rem !important;
+    font-weight: 600 !important;
+  }
+
+  .code-slip-holder {
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    line-height: 1.15 !important;
   }
 
   .code-slip-qr {
-    border-color: #000 !important;
+    padding: 0.2rem !important;
+    border: 1px solid #333 !important;
+    border-radius: 4px !important;
     box-shadow: none !important;
+  }
+
+  .code-slip-qr svg {
+    display: block;
+    width: 68px !important;
+    height: 68px !important;
+  }
+
+  .code-sheet-student .code-slip-qr svg {
+    width: 60px !important;
+    height: 60px !important;
+  }
+
+  .code-slip-code {
+    font-size: 0.82rem !important;
+    letter-spacing: 0.08em !important;
+  }
+
+  .code-sheet-student .code-slip-code {
+    font-size: 0.76rem !important;
+    letter-spacing: 0.05em !important;
+  }
+
+  .code-slip-rule {
+    font-size: 0.58rem !important;
+    line-height: 1.15 !important;
+    color: #333 !important;
   }
 
   .code-slip-copy {

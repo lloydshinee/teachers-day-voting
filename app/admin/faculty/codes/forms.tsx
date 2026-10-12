@@ -136,6 +136,7 @@ function IssuedCodeSheet({
   statuses: DepartmentCodeStatus[];
   onClear: () => void;
 }) {
+  const [selectedDept, setSelectedDept] = useState<string>("ALL");
   const all = batches.flatMap((batch) => batch.issued);
   if (all.length === 0) {
     return null;
@@ -144,6 +145,15 @@ function IssuedCodeSheet({
   const departmentById = new Map(
     statuses.map((status) => [status.department.id, status.department] as const),
   );
+
+  const departmentsInBatch = Array.from(
+    new Set(all.map((entry) => entry.departmentCode)),
+  ).sort();
+
+  const displayedEntries =
+    selectedDept === "ALL"
+      ? all
+      : all.filter((entry) => entry.departmentCode === selectedDept);
 
   const copyCode = async (code: string, button: HTMLButtonElement) => {
     try {
@@ -158,9 +168,9 @@ function IssuedCodeSheet({
     }
   };
 
-  const exportCsv = () => {
+  const downloadCsv = (entries: IssuedFacultyCode[], filename: string) => {
     const header = "department,full_name,code";
-    const lines = all.map((entry) =>
+    const lines = entries.map((entry) =>
       [entry.departmentCode, `"${entry.fullName.replace(/"/g, '""')}"`, entry.code].join(","),
     );
     const blob = new Blob([[header, ...lines].join("\n")], {
@@ -169,11 +179,73 @@ function IssuedCodeSheet({
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `faculty-codes-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.download = filename;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
+  };
+
+  const exportCurrentCsv = () => {
+    const dateStr = new Date().toISOString().slice(0, 10);
+    if (selectedDept === "ALL") {
+      downloadCsv(all, `faculty-codes-ALL-${dateStr}.csv`);
+    } else {
+      const deptEntries = all.filter((e) => e.departmentCode === selectedDept);
+      downloadCsv(deptEntries, `faculty-codes-${selectedDept}-${dateStr}.csv`);
+    }
+  };
+
+  const exportSeparateCsvs = () => {
+    const dateStr = new Date().toISOString().slice(0, 10);
+    departmentsInBatch.forEach((code, index) => {
+      const deptEntries = all.filter((e) => e.departmentCode === code);
+      // Small staggered delay so browsers allow multiple simultaneous downloads
+      window.setTimeout(() => {
+        downloadCsv(deptEntries, `faculty-codes-${code}-${dateStr}.csv`);
+      }, index * 200);
+    });
+  };
+
+  const renderSlip = (entry: IssuedFacultyCode) => {
+    const department = departmentById.get(entry.departmentId);
+    const departmentLabel =
+      department !== undefined
+        ? `${department.code} · ${department.name}`
+        : entry.departmentCode;
+
+    return (
+      <li key={entry.facultyId} className="code-slip">
+        <p className="code-slip-event">Teachers&apos; Day Voting</p>
+        <p className="code-slip-kind">Faculty voting Code</p>
+        <p className="code-slip-department">{departmentLabel}</p>
+        <p className="code-slip-holder">{entry.fullName}</p>
+        <span
+          className="code-slip-qr"
+          role="img"
+          aria-label={`QR for Code ${entry.code}`}
+        >
+          <QRCode
+            value={buildVoteCodeLink(entry.code)}
+            size={72}
+            title={`Vote link QR for ${entry.code}`}
+          />
+        </span>
+        <p className="code-slip-code">{entry.code}</p>
+        <p className="code-slip-rule">
+          Single-use code • 1 vote only.
+        </p>
+        <button
+          type="button"
+          className="code-slip-copy print:hidden"
+          onClick={(event) =>
+            void copyCode(entry.code, event.currentTarget)
+          }
+        >
+          Copy
+        </button>
+      </li>
+    );
   };
 
   return (
@@ -191,74 +263,131 @@ function IssuedCodeSheet({
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 print:bg-white print:p-0">
-        <div className="print:hidden flex flex-col gap-2 sm:flex-row">
-          <Button type="button" onClick={exportCsv} className="h-11 flex-1">
-            Export CSV
+        {/* Department Filter Controls */}
+        <div className="print:hidden flex flex-col gap-2 rounded-lg border bg-muted/40 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Department Filter (Print & Export)
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Showing {displayedEntries.length} of {all.length} slips
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant={selectedDept === "ALL" ? "default" : "outline"}
+              onClick={() => setSelectedDept("ALL")}
+              className="h-8 text-xs font-medium"
+            >
+              All Departments ({all.length})
+            </Button>
+            {departmentsInBatch.map((code) => {
+              const count = all.filter((e) => e.departmentCode === code).length;
+              return (
+                <Button
+                  key={code}
+                  type="button"
+                  size="sm"
+                  variant={selectedDept === code ? "default" : "outline"}
+                  onClick={() => setSelectedDept(code)}
+                  className="h-8 text-xs font-medium"
+                >
+                  {code} ({count})
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="print:hidden flex flex-wrap gap-2">
+          <Button
+            type="button"
+            onClick={exportCurrentCsv}
+            className="h-10 flex-1 min-w-[140px]"
+          >
+            Export CSV ({selectedDept === "ALL" ? "Combined" : selectedDept})
           </Button>
+
+          {departmentsInBatch.length > 1 && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={exportSeparateCsvs}
+              className="h-10 flex-1 min-w-[180px]"
+              title="Download separate CSV files for each department"
+            >
+              Export Separate CSVs ({departmentsInBatch.length} files)
+            </Button>
+          )}
+
           <Button
             type="button"
             variant="outline"
             onClick={() => window.print()}
-            className="h-11 flex-1"
+            className="h-10 flex-1 min-w-[140px]"
           >
-            Print code sheet
+            Print {selectedDept === "ALL" ? "All Departments" : `${selectedDept} Only`}
           </Button>
+
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             onClick={onClear}
-            className="h-11 flex-1"
+            className="h-10 min-w-[90px]"
           >
             Dismiss
           </Button>
         </div>
-        <div className="code-sheet">
-          <h2 className="hidden text-xl font-bold print:block">
-            Teachers&apos; Day Voting — faculty voting Codes, distribute once
-            then destroy this sheet
+
+        {/* Code Sheets with per-department page breaks */}
+        <div className="code-sheet code-sheet-faculty">
+          <h2 className="hidden text-xl font-bold print:block mb-3">
+            Teachers&apos; Day Voting — Faculty Voting Codes
           </h2>
-          <ul className="code-sheet-list">
-            {all.map((entry) => {
-              const department = departmentById.get(entry.departmentId);
-              const departmentLabel =
-                department !== undefined
-                  ? `${department.code} · ${department.name}`
-                  : entry.departmentCode;
+
+          {selectedDept === "ALL" ? (
+            departmentsInBatch.map((deptCode) => {
+              const deptEntries = all.filter((e) => e.departmentCode === deptCode);
+              const dept = statuses.find((s) => s.department.code === deptCode)?.department;
+              const deptTitle = dept ? `${dept.code} · ${dept.name}` : deptCode;
+
               return (
-                <li key={entry.facultyId} className="code-slip">
-                  <p className="code-slip-event">Teachers&apos; Day Voting</p>
-                  <p className="code-slip-kind">Faculty voting Code</p>
-                  <p className="code-slip-department">{departmentLabel}</p>
-                  <p className="code-slip-holder">{entry.fullName}</p>
-                  <span
-                    className="code-slip-qr"
-                    role="img"
-                    aria-label={`QR for Code ${entry.code}`}
-                  >
-                    <QRCode
-                      value={buildVoteCodeLink(entry.code)}
-                      size={96}
-                      title={`Vote link QR for ${entry.code}`}
-                    />
-                  </span>
-                  <p className="code-slip-code">{entry.code}</p>
-                  <p className="code-slip-rule">
-                    One Code, one vote — do not share. This Code stops
-                    working after one vote.
-                  </p>
-                  <button
-                    type="button"
-                    className="code-slip-copy print:hidden"
-                    onClick={(event) =>
-                      void copyCode(entry.code, event.currentTarget)
-                    }
-                  >
-                    Copy
-                  </button>
-                </li>
+                <section
+                  key={deptCode}
+                  className="code-sheet-department-section mb-6 print:mb-0 print:break-after-page"
+                >
+                  <div className="code-sheet-dept-header mb-2.5 pb-1 border-b-2 border-border print:border-black flex items-baseline justify-between">
+                    <h3 className="text-base font-bold text-foreground print:text-black">
+                      {deptTitle}
+                    </h3>
+                    <span className="text-xs text-muted-foreground print:text-black font-medium">
+                      {deptEntries.length} faculty slips
+                    </span>
+                  </div>
+                  <ul className="code-sheet-list">
+                    {deptEntries.map((entry) => renderSlip(entry))}
+                  </ul>
+                </section>
               );
-            })}
-          </ul>
+            })
+          ) : (
+            <section className="code-sheet-department-section">
+              <div className="code-sheet-dept-header mb-2.5 pb-1 border-b-2 border-border print:border-black flex items-baseline justify-between">
+                <h3 className="text-base font-bold text-foreground print:text-black">
+                  {statuses.find((s) => s.department.code === selectedDept)?.department.name ?? selectedDept} ({selectedDept})
+                </h3>
+                <span className="text-xs text-muted-foreground print:text-black font-medium">
+                  {displayedEntries.length} faculty slips
+                </span>
+              </div>
+              <ul className="code-sheet-list">
+                {displayedEntries.map((entry) => renderSlip(entry))}
+              </ul>
+            </section>
+          )}
         </div>
       </CardContent>
     </Card>
