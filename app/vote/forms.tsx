@@ -280,7 +280,7 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
                 <Button
                   type="submit"
                   disabled={pending || codeInput.trim() === ""}
-                  className="h-12 w-full text-base font-semibold shadow-xs"
+                  className="h-13 sm:h-14 w-full text-base font-bold rounded-xl shadow-md shadow-primary/20 transition-all"
                 >
                   {pending ? "Validating Code…" : "Continue to Ballot"}
                 </Button>
@@ -418,13 +418,14 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
                 </ul>
               )}
 
-              <div className="flex flex-col gap-2 sm:flex-row pt-2">
+              <div className="flex flex-col gap-2.5 sm:flex-row pt-3">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={backToCode}
-                  className="h-11 flex-1 text-sm font-medium"
+                  className="h-13 sm:h-14 flex-1 text-base font-semibold border-2 border-border/80 hover:bg-muted/70 rounded-xl transition-all"
                 >
+                  <ArrowLeft className="mr-1.5 size-4" />
                   Back
                 </Button>
                 <Button
@@ -434,7 +435,7 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
                     setError(null);
                     setStep("confirm");
                   }}
-                  className="h-11 flex-1 text-sm font-semibold shadow-xs"
+                  className="h-13 sm:h-14 flex-1 text-base font-bold rounded-xl shadow-md shadow-primary/20 transition-all"
                 >
                   Review Choice
                 </Button>
@@ -491,7 +492,7 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2 sm:flex-row pt-1">
+              <div className="flex flex-col gap-2.5 sm:flex-row pt-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -500,17 +501,25 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
                     setError(null);
                     setStep("ballot");
                   }}
-                  className="h-11 flex-1 text-sm font-medium"
+                  className="h-13 sm:h-14 flex-1 text-base font-semibold border-2 border-border/80 hover:bg-muted/70 rounded-xl transition-all"
                 >
+                  <RotateCcw className="mr-1.5 size-4" />
                   Change Selection
                 </Button>
                 <Button
                   type="button"
                   disabled={pending || selectedId === null}
                   onClick={handleCast}
-                  className="h-11 flex-1 text-sm font-semibold shadow-xs"
+                  className="h-13 sm:h-14 flex-1 text-base font-bold rounded-xl shadow-md shadow-primary/25 transition-all bg-primary hover:bg-primary/95 text-primary-foreground"
                 >
-                  {pending ? "Submitting…" : "Confirm & Cast Vote"}
+                  {pending ? (
+                    "Submitting…"
+                  ) : (
+                    <>
+                      <CheckCircle2 className="mr-1.5 size-5" />
+                      Confirm & Cast Vote
+                    </>
+                  )}
                 </Button>
               </div>
             </CardContent>
