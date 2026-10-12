@@ -279,8 +279,9 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
                 </div>
                 <Button
                   type="submit"
+                  size="2xl"
                   disabled={pending || codeInput.trim() === ""}
-                  className="h-13 sm:h-14 w-full text-base font-bold rounded-xl shadow-md shadow-primary/20 transition-all"
+                  className="min-h-[56px] h-14 w-full text-base sm:text-lg font-bold rounded-2xl shadow-md shadow-primary/20 transition-all active:scale-[0.99]"
                 >
                   {pending ? "Validating Code…" : "Continue to Ballot"}
                 </Button>
@@ -418,24 +419,26 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
                 </ul>
               )}
 
-              <div className="flex flex-col gap-2.5 sm:flex-row pt-3">
+              <div className="flex flex-col gap-3 sm:flex-row pt-3">
                 <Button
                   type="button"
                   variant="outline"
+                  size="2xl"
                   onClick={backToCode}
-                  className="h-13 sm:h-14 flex-1 text-base font-semibold border-2 border-border/80 hover:bg-muted/70 rounded-xl transition-all"
+                  className="min-h-[56px] h-14 w-full sm:flex-1 text-base sm:text-lg font-semibold border-2 border-border/80 hover:bg-muted/70 rounded-2xl transition-all active:scale-[0.99]"
                 >
-                  <ArrowLeft className="mr-1.5 size-4" />
+                  <ArrowLeft className="mr-1.5 size-5" />
                   Back
                 </Button>
                 <Button
                   type="button"
+                  size="2xl"
                   disabled={selectedId === null}
                   onClick={() => {
                     setError(null);
                     setStep("confirm");
                   }}
-                  className="h-13 sm:h-14 flex-1 text-base font-bold rounded-xl shadow-md shadow-primary/20 transition-all"
+                  className="min-h-[56px] h-14 w-full sm:flex-1 text-base sm:text-lg font-bold rounded-2xl shadow-md shadow-primary/20 transition-all active:scale-[0.99]"
                 >
                   Review Choice
                 </Button>
@@ -492,25 +495,27 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2.5 sm:flex-row pt-2">
+              <div className="flex flex-col gap-3 sm:flex-row pt-2">
                 <Button
                   type="button"
                   variant="outline"
+                  size="2xl"
                   disabled={pending}
                   onClick={() => {
                     setError(null);
                     setStep("ballot");
                   }}
-                  className="h-13 sm:h-14 flex-1 text-base font-semibold border-2 border-border/80 hover:bg-muted/70 rounded-xl transition-all"
+                  className="min-h-[56px] h-14 w-full sm:flex-1 text-base sm:text-lg font-semibold border-2 border-border/80 hover:bg-muted/70 rounded-2xl transition-all active:scale-[0.99]"
                 >
-                  <RotateCcw className="mr-1.5 size-4" />
+                  <RotateCcw className="mr-1.5 size-5" />
                   Change Selection
                 </Button>
                 <Button
                   type="button"
+                  size="2xl"
                   disabled={pending || selectedId === null}
                   onClick={handleCast}
-                  className="h-13 sm:h-14 flex-1 text-base font-bold rounded-xl shadow-md shadow-primary/25 transition-all bg-primary hover:bg-primary/95 text-primary-foreground"
+                  className="min-h-[56px] h-14 w-full sm:flex-1 text-base sm:text-lg font-bold rounded-2xl shadow-md shadow-primary/25 transition-all bg-primary hover:bg-primary/95 text-primary-foreground active:scale-[0.99]"
                 >
                   {pending ? (
                     "Submitting…"
@@ -545,19 +550,19 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
               <span className="font-semibold text-foreground">Token Status:</span> Your single-use voting Code has been permanently retired and cannot be reused.
             </div>
 
-            <div className="flex w-full flex-col sm:flex-row gap-2.5 mt-1">
+            <div className="flex w-full flex-col sm:flex-row gap-3 mt-1">
               <Link
                 href="/"
-                className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-input bg-background px-4 text-sm font-medium text-foreground hover:bg-muted transition-colors shadow-2xs"
+                className="inline-flex min-h-[52px] h-[52px] w-full sm:flex-1 items-center justify-center rounded-xl border-2 border-input bg-background px-4 text-base font-semibold text-foreground hover:bg-muted transition-colors shadow-2xs"
               >
-                <Home className="mr-1.5 size-4" />
+                <Home className="mr-1.5 size-5" />
                 Home Page
               </Link>
               <Link
                 href="/results"
-                className="inline-flex h-11 flex-1 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 shadow-xs transition-colors"
+                className="inline-flex min-h-[52px] h-[52px] w-full sm:flex-1 items-center justify-center rounded-xl bg-primary px-4 text-base font-bold text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20 transition-colors"
               >
-                <BarChart2 className="mr-1.5 size-4" />
+                <BarChart2 className="mr-1.5 size-5" />
                 View Results
               </Link>
             </div>
