@@ -423,7 +423,7 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
                   type="button"
                   variant="outline"
                   onClick={backToCode}
-                  className="h-11 flex-1 text-sm font-medium"
+                  className="h-11 w-full sm:flex-1 shrink-0 text-sm font-medium"
                 >
                   Back
                 </Button>
@@ -434,7 +434,7 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
                     setError(null);
                     setStep("confirm");
                   }}
-                  className="h-11 flex-1 text-sm font-semibold shadow-xs"
+                  className="h-11 w-full sm:flex-1 shrink-0 text-sm font-semibold shadow-xs"
                 >
                   Review Choice
                 </Button>
@@ -500,7 +500,7 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
                     setError(null);
                     setStep("ballot");
                   }}
-                  className="h-11 flex-1 text-sm font-medium"
+                  className="h-11 w-full sm:flex-1 shrink-0 text-sm font-medium"
                 >
                   Change Selection
                 </Button>
@@ -508,7 +508,7 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
                   type="button"
                   disabled={pending || selectedId === null}
                   onClick={handleCast}
-                  className="h-11 flex-1 text-sm font-semibold shadow-xs"
+                  className="h-11 w-full sm:flex-1 shrink-0 text-sm font-semibold shadow-xs"
                 >
                   {pending ? "Submitting…" : "Confirm & Cast Vote"}
                 </Button>
@@ -539,14 +539,14 @@ export function VoteFlow({ initialCode }: { initialCode: string }) {
             <div className="flex w-full flex-col sm:flex-row gap-2.5 mt-1">
               <Link
                 href="/"
-                className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-input bg-background px-4 text-sm font-medium text-foreground hover:bg-muted transition-colors shadow-2xs"
+                className="inline-flex h-11 w-full sm:flex-1 shrink-0 items-center justify-center rounded-lg border border-input bg-background px-4 text-sm font-medium text-foreground hover:bg-muted transition-colors shadow-2xs"
               >
                 <Home className="mr-1.5 size-4" />
                 Home Page
               </Link>
               <Link
                 href="/results"
-                className="inline-flex h-11 flex-1 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 shadow-xs transition-colors"
+                className="inline-flex h-11 w-full sm:flex-1 shrink-0 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 shadow-xs transition-colors"
               >
                 <BarChart2 className="mr-1.5 size-4" />
                 View Results
