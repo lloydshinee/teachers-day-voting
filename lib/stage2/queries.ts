@@ -275,19 +275,33 @@ export async function getStage2Results(
   // Aggregate-only student-vote read: candidate + department scope, counted
   // in memory below against the frozen snapshot. No token/voter column is
   // selected (none exists).
-  const { data: voteRows, error: votesError } = await supabase
-    .from("votes")
-    .select("candidate_faculty_id, department_id")
-    .eq("election_id", electionId)
-    .eq("stage", "STUDENT");
-  if (votesError) {
-    return {
-      ok: false,
-      code: "DB_ERROR",
-      message: "Could not load student votes. Try again.",
-    };
+  const allVoteRows: Array<unknown> = [];
+  const VOTE_PAGE_SIZE = 1000;
+  let voteFrom = 0;
+  while (true) {
+    const { data: page, error: votesError } = await supabase
+      .from("votes")
+      .select("candidate_faculty_id, department_id")
+      .eq("election_id", electionId)
+      .eq("stage", "STUDENT")
+      .range(voteFrom, voteFrom + VOTE_PAGE_SIZE - 1);
+    if (votesError) {
+      return {
+        ok: false,
+        code: "DB_ERROR",
+        message: "Could not load student votes. Try again.",
+      };
+    }
+    if (!page || page.length === 0) {
+      break;
+    }
+    allVoteRows.push(...page);
+    if (page.length < VOTE_PAGE_SIZE) {
+      break;
+    }
+    voteFrom += VOTE_PAGE_SIZE;
   }
-  const votesParse = voteScopeRowSchema.array().safeParse(voteRows ?? []);
+  const votesParse = voteScopeRowSchema.array().safeParse(allVoteRows);
   if (!votesParse.success) {
     return {
       ok: false,

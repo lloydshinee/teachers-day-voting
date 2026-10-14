@@ -157,21 +157,36 @@ export async function getStudentCodeStatus(
       ? null
       : new Set(participationParse.data.map((row) => row.department_id));
 
-  const { data: tokenRows, error: tokensError } = await supabase
-    .from("voting_tokens")
-    .select("department_id, used, invalidated_at")
-    .eq("election_id", electionId)
-    .eq("token_type", "STUDENT");
-  if (tokensError) {
-    return {
-      ok: false,
-      code: "DB_ERROR",
-      message: "Could not load student Tokens. Try again.",
-    };
+  const allTokenRows: Array<unknown> = [];
+  const PAGE_SIZE = 1000;
+  let from = 0;
+  while (true) {
+    const { data: page, error: tokensError } = await supabase
+      .from("voting_tokens")
+      .select("department_id, used, invalidated_at")
+      .eq("election_id", electionId)
+      .eq("token_type", "STUDENT")
+      .range(from, from + PAGE_SIZE - 1);
+    if (tokensError) {
+      return {
+        ok: false,
+        code: "DB_ERROR",
+        message: "Could not load student Tokens. Try again.",
+      };
+    }
+    if (!page || page.length === 0) {
+      break;
+    }
+    allTokenRows.push(...page);
+    if (page.length < PAGE_SIZE) {
+      break;
+    }
+    from += PAGE_SIZE;
   }
+
   const tokensParse = studentTokenRowSchema
     .array()
-    .safeParse(tokenRows ?? []);
+    .safeParse(allTokenRows);
   if (!tokensParse.success) {
     return {
       ok: false,
